@@ -65,6 +65,172 @@ function getFeedsSheetName_() {
   return "RSS Feeds";
 }
 
+/** ====== Theme Rules (UI) ====== */
+
+function ui_getThemeRules() {
+  try {
+    const sheetName = (typeof repo_getControlSheetName_ === "function")
+      ? repo_getControlSheetName_()
+      : getControlSheetName_();
+    const sh = (typeof repo_getSheetOrThrow_ === "function")
+      ? repo_getSheetOrThrow_(sheetName)
+      : getSpreadsheet_().getSheetByName(sheetName);
+
+    if (!sh) throw new Error(`Sheet not found: "${sheetName}"`);
+
+    const startRow =
+      (typeof THEME_RULES_START_ROW !== "undefined" && Number(THEME_RULES_START_ROW) >= 1)
+        ? Number(THEME_RULES_START_ROW)
+        : 5;
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < startRow) {
+      return { ok: true, rows: [], totalRows: 0, sheet: sheetName };
+    }
+
+    const values = sh.getRange(startRow, 1, lastRow - startRow + 1, 4).getValues();
+    const rows = [];
+
+    values.forEach((row, idx) => {
+      const theme = String(row[0] || "").trim();
+      const poi = String(row[1] || "").trim();
+      const keywords = String(row[2] || "").trim();
+      const activeRaw = row[3];
+      const active =
+        activeRaw === true || activeRaw === 1 || String(activeRaw).trim().toLowerCase() === "true";
+
+      const hasContent = theme || poi || keywords || active;
+      if (!hasContent) return;
+
+      rows.push({
+        rowIndex: startRow + idx,
+        theme,
+        poi,
+        keywords,
+        active
+      });
+    });
+
+    return { ok: true, rows, totalRows: lastRow - startRow + 1, sheet: sheetName };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
+function ui_getThemeRuleDropdowns() {
+  try {
+    const sheetName = (typeof repo_getControlSheetName_ === "function")
+      ? repo_getControlSheetName_()
+      : getControlSheetName_();
+    const sh = (typeof repo_getSheetOrThrow_ === "function")
+      ? repo_getSheetOrThrow_(sheetName)
+      : getSpreadsheet_().getSheetByName(sheetName);
+
+    if (!sh) throw new Error(`Sheet not found: "${sheetName}"`);
+
+    const startRow =
+      (typeof THEME_RULES_START_ROW !== "undefined" && Number(THEME_RULES_START_ROW) >= 1)
+        ? Number(THEME_RULES_START_ROW)
+        : 5;
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < startRow) {
+      return { ok: true, themes: [], pois: [] };
+    }
+
+    const values = sh.getRange(startRow, 1, lastRow - startRow + 1, 3).getValues();
+    const themes = new Set();
+    const pois = new Set();
+
+    values.forEach(row => {
+      const theme = String(row[0] || "").trim();
+      const poi = String(row[1] || "").trim();
+      if (theme) themes.add(theme);
+      if (poi) pois.add(poi);
+    });
+
+    return {
+      ok: true,
+      themes: Array.from(themes).sort((a, b) => a.localeCompare(b)),
+      pois: Array.from(pois).sort((a, b) => a.localeCompare(b))
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
+function ui_saveThemeRules(payload) {
+  try {
+    const edits = payload?.edits || [];
+    if (!Array.isArray(edits) || !edits.length) {
+      return { ok: true, saved: 0 };
+    }
+
+    const sheetName = (typeof repo_getControlSheetName_ === "function")
+      ? repo_getControlSheetName_()
+      : getControlSheetName_();
+    const sh = (typeof repo_getSheetOrThrow_ === "function")
+      ? repo_getSheetOrThrow_(sheetName)
+      : getSpreadsheet_().getSheetByName(sheetName);
+
+    if (!sh) throw new Error(`Sheet not found: "${sheetName}"`);
+
+    let saved = 0;
+    edits.forEach(edit => {
+      const rowIndex = Number(edit?.rowIndex);
+      if (!rowIndex || rowIndex < 1) return;
+
+      const theme = String(edit?.theme || "").trim();
+      const poi = String(edit?.poi || "").trim();
+      const keywords = String(edit?.keywords || "").trim();
+      const active = edit?.active === true;
+
+      sh.getRange(rowIndex, 1, 1, 4).setValues([[theme, poi, keywords, active]]);
+      sh.getRange(rowIndex, 4, 1, 1).insertCheckboxes();
+      saved += 1;
+    });
+
+    return { ok: true, saved };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
+function ui_addThemeRule() {
+  try {
+    const sheetName = (typeof repo_getControlSheetName_ === "function")
+      ? repo_getControlSheetName_()
+      : getControlSheetName_();
+    const sh = (typeof repo_getSheetOrThrow_ === "function")
+      ? repo_getSheetOrThrow_(sheetName)
+      : getSpreadsheet_().getSheetByName(sheetName);
+
+    if (!sh) throw new Error(`Sheet not found: "${sheetName}"`);
+
+    const startRow =
+      (typeof THEME_RULES_START_ROW !== "undefined" && Number(THEME_RULES_START_ROW) >= 1)
+        ? Number(THEME_RULES_START_ROW)
+        : 5;
+
+    sh.insertRowBefore(startRow);
+    sh.getRange(startRow, 1, 1, 4).setValues([["", "", "", false]]);
+    sh.getRange(startRow, 4, 1, 1).insertCheckboxes();
+
+    return {
+      ok: true,
+      row: {
+        rowIndex: startRow,
+        theme: "",
+        poi: "",
+        keywords: "",
+        active: false
+      }
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
 /** ====== RSS Feeds (simple UI, previously UI_Feeds.gs) ====== */
 
 // Model used for Gemini suggestions
