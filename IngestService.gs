@@ -168,8 +168,21 @@ function ingest_importRSS_(daysBack) {
           var rawLink = ingest_getEntryLink_(entry);
           var linkKey = ingest_normalizeLink_(rawLink);
 
-          var pubDateText = ingest_getChildTextAny_(entry, ["pubDate", "published", "updated"]);
-          var desc = ingest_getChildTextAny_(entry, ["description", "summary", "content"]) || "";
+          var pubDateText = ingest_getChildTextAny_(entry, [
+            "pubDate",
+            "published",
+            "updated",
+            "date",
+            "created",
+            "issued",
+            "modified"
+          ]);
+          var desc = ingest_getChildTextAny_(entry, [
+            "description",
+            "summary",
+            "content",
+            "encoded"
+          ]) || "";
 
           if (!title || !linkKey) {
             stats.skippedMissingFields++;
@@ -186,13 +199,11 @@ function ingest_importRSS_(daysBack) {
           if (pubDateText) pubDate = new Date(pubDateText);
 
           if (cutoff) {
-            if (!pubDate || isNaN(pubDate.getTime())) {
-              stats.skippedDate++;
-              return;
-            }
-            if (pubDate < cutoff) {
-              stats.skippedDate++;
-              return;
+            if (pubDate && !isNaN(pubDate.getTime())) {
+              if (pubDate < cutoff) {
+                stats.skippedDate++;
+                return;
+              }
             }
           }
 
@@ -507,9 +518,12 @@ function ingest_getFeedEntries_(root) {
 function ingest_getChildByLocalName_(el, localName) {
   if (!el) return null;
   var kids = el.getChildren();
+  var target = String(localName || "").toLowerCase();
   for (var i = 0; i < kids.length; i++) {
     var k = kids[i];
-    if (k.getName && k.getName() === localName) return k;
+    if (!k.getName) continue;
+    var kName = ingest_getLocalName_(k);
+    if (kName && kName.toLowerCase() === target) return k;
   }
   return null;
 }
@@ -518,9 +532,12 @@ function ingest_getChildrenByLocalName_(el, localName) {
   if (!el) return [];
   var out = [];
   var kids = el.getChildren();
+  var target = String(localName || "").toLowerCase();
   for (var i = 0; i < kids.length; i++) {
     var k = kids[i];
-    if (k.getName && k.getName() === localName) out.push(k);
+    if (!k.getName) continue;
+    var kName = ingest_getLocalName_(k);
+    if (kName && kName.toLowerCase() === target) out.push(k);
   }
   return out;
 }
@@ -544,18 +561,37 @@ function ingest_getEntryLink_(entry) {
   var rssLink = ingest_getChildTextAny_(entry, ["link"]);
   if (rssLink) return rssLink;
 
-  var linkEl = ingest_getChildByLocalName_(entry, "link");
-  if (linkEl) {
-    try {
-      var hrefAttr = linkEl.getAttribute("href");
-      if (hrefAttr) {
-        var v = String(hrefAttr.getValue() || "").trim();
-        if (v) return v;
-      }
-    } catch (e) {}
+  var linkEls = ingest_getChildrenByLocalName_(entry, "link");
+  if (linkEls.length) {
+    var preferred = null;
+    for (var i = 0; i < linkEls.length; i++) {
+      var linkEl = linkEls[i];
+      var rel = "";
+      try {
+        var relAttr = linkEl.getAttribute("rel");
+        rel = relAttr ? String(relAttr.getValue() || "").trim().toLowerCase() : "";
+      } catch (e) {}
 
-    var t = String(linkEl.getText() || "").trim();
-    if (t) return t;
+      if (!rel || rel === "alternate") {
+        preferred = linkEl;
+        break;
+      }
+
+      if (!preferred) preferred = linkEl;
+    }
+
+    if (preferred) {
+      try {
+        var hrefAttr = preferred.getAttribute("href");
+        if (hrefAttr) {
+          var v = String(hrefAttr.getValue() || "").trim();
+          if (v) return v;
+        }
+      } catch (e) {}
+
+      var t = String(preferred.getText() || "").trim();
+      if (t) return t;
+    }
   }
 
   var guid = ingest_getChildTextAny_(entry, ["guid", "id"]);
@@ -589,4 +625,12 @@ function ingest_detectSourceFromEntry_(entry) {
   } catch (e) {
     return "";
   }
+}
+
+function ingest_getLocalName_(el) {
+  if (!el || !el.getName) return "";
+  var name = String(el.getName() || "");
+  if (!name) return "";
+  var parts = name.split(":");
+  return parts[parts.length - 1];
 }
