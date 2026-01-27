@@ -1,0 +1,769 @@
+/*********************************
+ * FUTURESCANS — WEEKLY PICKS (UI + SCORING) — v1.4 (ARCHIVE REMOVED)
+ *
+ * Removed:
+ * - Auto-archive Weekly Picks
+ * - Archive viewer + manual archive import + title fetch helpers
+ * - Similarity-to-past-picks boost (profile)
+ *
+ * Kept:
+ * - Learnability SOFT penalty behaviour (v1.4)
+ * - Gemini config generator supports optional baseline JSON
+ * - scoring_getConfig_() hook (if you have it elsewhere)
+ *********************************/
+
+// ===== Sheets =====
+const SCORING_CONFIG_SHEET   = "ScoringConfig";
+const CFG_SHEET_KEY_JSON     = "config_json";
+
+const SC_RAW_SHEET           = "Raw Articles";
+const SC_PICKS_SHEET         = "Weekly Picks";
+
+/* =========================================================
+ * 0) Spreadsheet getter (Web App safe)
+ * ========================================================= */
+function getSpreadsheet_() {
+  try {
+    if (typeof SPREADSHEET_ID === "string" &&
+        SPREADSHEET_ID &&
+        SPREADSHEET_ID !== "PASTE_YOUR_SPREADSHEET_ID_HERE") {
+      return SpreadsheetApp.openById(SPREADSHEET_ID);
+    }
+  } catch (_) {}
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+/* =========================================================
+ * 1) UI — Config JSON
+ * ========================================================= */
+function ui_getScoringConfig_v1() {
+  const kv = readKeyValueSheet_(SCORING_CONFIG_SHEET);
+  const raw = kv[CFG_SHEET_KEY_JSON];
+
+  const prop = PropertiesService.getScriptProperties().getProperty("SCORING_CONFIG_JSON");
+
+  if (raw) return { jsonText: String(raw) };
+  if (prop) return { jsonText: String(prop) };
+
+  const starter = sc_defaultConfig_();
+  return { jsonText: JSON.stringify(starter, null, 2) };
+}
+
+function ui_saveScoringConfigJson_v1(jsonText) {
+  if (!jsonText || !String(jsonText).trim()) throw new Error("Config JSON is empty.");
+
+  let obj;
+  try {
+    obj = JSON.parse(String(jsonText));
+  } catch (e) {
+    throw new Error("Invalid JSON: " + e.message);
+  }
+
+  let savedObj = obj;
+  if (typeof sanitizeScoringConfig_ === "function") {
+    savedObj = sanitizeScoringConfig_(obj);
+  }
+
+  savedObj = sc_mergeDefaults_(savedObj);
+
+  const savedText = JSON.stringify(savedObj, null, 2);
+
+  upsertKeyValue_(SCORING_CONFIG_SHEET, CFG_SHEET_KEY_JSON, savedText);
+  upsertKeyValue_(SCORING_CONFIG_SHEET, "updated_at", new Date().toISOString());
+  PropertiesService.getScriptProperties().setProperty("SCORING_CONFIG_JSON", savedText);
+
+  return { ok: true, savedText };
+}
+
+/* =========================================================
+ * 2) UI — Weekly Picks table
+ * ========================================================= */
+function ui_getWeeklyPicks_v1() {
+  const ss = getSpreadsheet_();
+  const sh = ss.getSheetByName(SC_PICKS_SHEET);
+  if (!sh) throw new Error(`Sheet not found: "${SC_PICKS_SHEET}"`);
+
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return { headers: [], rows: [] };
+
+  const values = sh.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = values[0].map(h => String(h || "").trim());
+
+  const rows = [];
+  for (let i = 1; i < values.length; i++) {
+    const obj = {};
+    let any = false;
+    for (let c = 0; c < headers.length; c++) {
+      const key = headers[c] || `Col${c+1}`;
+      const v = values[i][c];
+      if (v !== "" && v != null) any = true;
+      obj[key] = v;
+    }
+    if (any) rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function ui_runScoringNow_v1() {
+  const msg = generateWeeklyPicks_Scored();
+  return String(msg || "Scoring finished.");
+}
+
+/* =========================================================
+ * 3) SCORING — Entry point
+ * ========================================================= */
+function generateWeeklyPicks_Scored() {
+  const ss = getSpreadsheet_();
+
+  const rawSh = ss.getSheetByName(SC_RAW_SHEET);
+  if (!rawSh) throw new Error(`Missing sheet: ${SC_RAW_SHEET}`);
+
+  let picksSh = ss.getSheetByName(SC_PICKS_SHEET);
+  if (!picksSh) picksSh = ss.insertSheet(SC_PICKS_SHEET);
+
+  const cfg = sc_getConfigSafe_();
+  const params = sc_readParams_(cfg);
+
+  const lastRow = rawSh.getLastRow();
+  const rawVals = lastRow >= 2 ? rawSh.getRange(2, 1, lastRow - 1, 8).getValues() : [];
+
+  const scopeRe   = sc_safeRegex_(cfg.scopeGateRegex);
+  const groups    = sc_normalizeGroups_(cfg.keywordGroups || {});
+  const weights   = sc_normalizeWeights_(cfg.weights || {});
+
+  const synIdx     = sc_buildSynIndex_(cfg.synonyms || {});
+  const negGroups  = sc_normalizeGroups_(cfg.negativeGroups || {});
+  const negWeights = sc_normalizeWeights_(cfg.negativeWeights || {});
+
+  let seen = 0;
+  let skippedEmpty = 0;
+  let skippedRecency = 0;
+  let scopeMiss = 0;
+  let skippedMinScore = 0;
+
+  const out = [];
+
+  for (const r of rawVals) {
+    const title  = String(r[0] || "").trim(); // A
+    const link   = String(r[1] || "").trim(); // B
+    const dateV  = r[2];                      // C
+    const source = String(r[3] || "").trim(); // D
+    const theme  = String(r[4] || "").trim(); // E
+    const poi    = String(r[5] || "").trim(); // F
+    const desc   = String(r[7] || "").trim(); // H
+
+    if (!title || !link) { skippedEmpty++; continue; }
+    seen++;
+
+    if (params.recencyDays && !sc_withinDays_(dateV, params.recencyDays)) { skippedRecency++; continue; }
+
+    const titleN = sc_normText_(title);
+    const descN  = sc_normText_(desc);
+    const combined = (titleN + " " + descN).trim();
+
+    const inScope = scopeRe ? scopeRe.test(combined) : true;
+    if (!inScope) scopeMiss++;
+
+    const scored = sc_score_(titleN, descN, groups, weights, negGroups, negWeights, params, synIdx);
+
+    let finalScore = scored.score;
+
+    // ✅ Learnability SOFT penalty (kept)
+    if (params.useLearnGate && scored.learnScore < params.minLearnScore) {
+      finalScore = Math.round(finalScore * params.learnPenaltyMultiplier * 100) / 100;
+    }
+
+    // Soft scope penalty
+    if (!inScope && params.scopePenalty < 1) {
+      finalScore = Math.round(finalScore * params.scopePenalty * 100) / 100;
+    }
+
+    if (finalScore < params.minScore) { skippedMinScore++; continue; }
+
+    out.push({
+      score: Math.round(finalScore * 100) / 100,
+      baseScore: scored.baseScore,
+      learnScore: scored.learnScore,
+      inScope: inScope ? "Y" : "N",
+      title,
+      link,
+      date: sc_fmtDate_(dateV),
+      source,
+      theme,
+      poi,
+      matched: scored.matched.join(", "),
+      descSnippet: desc.substring(0, 240)
+    });
+  }
+
+  out.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return String(b.date).localeCompare(String(a.date));
+  });
+
+  const capped = sc_applyCaps_(out, params);
+  const finalRows = capped.slice(0, params.topN);
+
+  sc_writeWeeklyPicks_(picksSh, finalRows);
+
+  const summary =
+    `Weekly Picks updated: ${finalRows.length} rows | ` +
+    `seen=${seen}, empty=${skippedEmpty}, recency_excl=${skippedRecency}, ` +
+    `scope_miss=${scopeMiss}, minScore_excl=${skippedMinScore}`;
+
+  Logger.log(summary);
+  return summary;
+}
+
+/* =========================================================
+ * 4) Config handling
+ * ========================================================= */
+function sc_getConfigSafe_() {
+  // ✅ Keep scoring_getConfig_ hook (non-archive)
+  if (typeof scoring_getConfig_ === "function") {
+    const cfg = scoring_getConfig_();
+    return sc_mergeDefaults_(cfg);
+  }
+
+  const raw = PropertiesService.getScriptProperties().getProperty("SCORING_CONFIG_JSON");
+  if (raw) {
+    try { return sc_mergeDefaults_(JSON.parse(raw)); } catch (_) {}
+  }
+
+  const kv = readKeyValueSheet_(SCORING_CONFIG_SHEET);
+  if (kv[CFG_SHEET_KEY_JSON]) {
+    try { return sc_mergeDefaults_(JSON.parse(String(kv[CFG_SHEET_KEY_JSON]))); } catch (_) {}
+  }
+
+  return sc_defaultConfig_();
+}
+
+function sc_defaultConfig_() {
+  return {
+    version: "1.4-no-archive",
+
+    scopeGateRegex:
+      "\\b(job|jobs|employment|employers?|employee|employees|worker|workers|workforce|labou?r|hiring|hire|recruit|recruitment|vacanc(y|ies)|headcount|staffing|layoff|layoffs|retrench(ment)?|redundan(cy|cies)|unemployment|wage|wages|salary|salaries|pay|bonus|skills?|training|upskilling|reskilling|workplace|wsh|safety|union|industrial\\s+relations|collective\\s+bargaining|gig|platform|migrant|foreign\\s+worker|retirement|pension)\\b",
+
+    topN: 15,
+    minScore: 6,
+    recencyDays: 365,
+    capPerTheme: 3,
+    capPerPOI: 3,
+    capPerSource: 2,
+    titleWeight: 1.2,
+    descWeight: 1.0,
+
+    scopePenalty: 0.7,
+    phraseBoost: 2.0,
+
+    // ✅ Learnability SOFT (kept)
+    useLearnGate: true,
+    minLearnScore: 8,
+    learnabilityWeight: 1.6,
+    learnPenaltyMultiplier: 0.8,
+
+    learnabilityGroups: [
+      "policy", "programme", "institutions", "evidence",
+      "implementation", "outcomes", "comparison",
+      "industrialRelations", "foresight"
+    ],
+
+    weights: {
+      policy: 4,
+      implementation: 4,
+      outcomes: 4,
+      evidence: 3,
+      institutions: 3,
+      programme: 3,
+      industrialRelations: 3,
+      comparison: 2,
+      foresight: 2,
+
+      labourMarket: 2,
+      skills: 2,
+      emergingTrends: 1,
+      aiContext: 0.5,
+
+      keywordDensity: 1
+    },
+
+    keywordGroups: {
+      policy: [
+        "bill", "act", "regulation", "regulatory", "policy", "guideline", "framework",
+        "standard", "licensing", "permit", "quota", "levy", "enforcement", "penalty"
+      ],
+      programme: [
+        "grant", "scheme", "pilot", "initiative", "programme", "program",
+        "subsidy", "funding", "voucher", "incentive"
+      ],
+      institutions: [
+        "ILO", "OECD", "World Bank", "IMF", "think tank", "ministry", "agency", "regulator",
+        "tripartite", "employer federation", "union", "labour department"
+      ],
+      implementation: [
+        "implementation", "rollout", "phased", "guidance", "code of practice",
+        "compliance", "inspection", "audit", "monitoring", "reporting requirement",
+        "enforced", "penalties", "licence", "licensing"
+      ],
+      outcomes: [
+        "evaluation", "impact", "results", "outcomes", "evidence",
+        "increased", "reduced", "improved", "declined",
+        "employment rate", "unemployment rate", "wage growth", "productivity",
+        "%", "percentage", "survey results"
+      ],
+      evidence: [
+        "survey", "dataset", "study", "report", "evaluation", "impact", "trial",
+        "randomised", "randomized", "meta-analysis", "longitudinal"
+      ],
+      comparison: [
+        "case study", "lessons", "model", "approach",
+        "benchmark", "best practice", "comparison", "compared with", "international"
+      ],
+      foresight: [
+        "by 2026", "2026", "2027", "2030", "forecast", "outlook", "scenario", "projection"
+      ],
+      labourMarket: [
+        "wage", "salary", "jobs", "hiring", "retrench", "layoff", "unemployment",
+        "vacancy", "recruitment", "headcount", "redundancy"
+      ],
+      skills: [
+        "training", "reskill", "upskill", "skillsfuture", "certification", "apprenticeship"
+      ],
+      industrialRelations: [
+        "union", "collective", "industrial action", "strike", "dispute", "bargaining"
+      ],
+      emergingTrends: [
+        "automation", "platform work", "gig", "hybrid work", "four-day week"
+      ],
+      aiContext: [
+        "ai", "genai", "automation", "machine learning"
+      ]
+    },
+
+    synonyms: {
+      layoff: ["retrench", "redundancy", "job cuts", "downsizing", "restructuring"],
+      hire: ["recruit", "recruitment", "headcount", "staffing", "onboard"],
+      wage: ["pay", "salary", "remuneration", "compensation"],
+      job: ["role", "position", "vacancy"],
+      skills: ["upskilling", "reskilling", "training", "apprenticeship", "certification"],
+      gig: ["platform", "freelance", "contractor"],
+      migrant: ["foreign worker", "work permit", "s pass", "employment pass"],
+      regulator: ["authority", "ministry", "agency"]
+    },
+
+    negativeGroups: {
+      offTopic: ["horoscope", "celebrity", "recipe", "gaming", "workout", "astrology"],
+      corporateNoise: [
+        "earnings", "revenue", "profit", "share price", "stock", "valuation",
+        "ipo", "merger", "acquisition", "dividend", "quarterly results"
+      ],
+      productHype: ["launches new", "announced a new", "new product", "smartphone", "gadget"]
+    },
+    negativeWeights: {
+      offTopic: 3,
+      corporateNoise: 2,
+      productHype: 1
+    },
+
+    notes: "v1.4-no-archive: removed archive/profile; kept learnability soft + baseline AI config gen."
+  };
+}
+
+function sc_mergeDefaults_(cfg) {
+  const base = sc_defaultConfig_();
+  const out = Object.assign({}, base, cfg || {});
+
+  out.weights = Object.assign({}, base.weights, (cfg && cfg.weights) || {});
+  out.keywordGroups = Object.assign({}, base.keywordGroups, (cfg && cfg.keywordGroups) || {});
+  out.synonyms = Object.assign({}, base.synonyms || {}, (cfg && cfg.synonyms) || {});
+  out.negativeGroups = Object.assign({}, base.negativeGroups || {}, (cfg && cfg.negativeGroups) || {});
+  out.negativeWeights = Object.assign({}, base.negativeWeights || {}, (cfg && cfg.negativeWeights) || {});
+
+  out.useLearnGate = (cfg && typeof cfg.useLearnGate === "boolean") ? cfg.useLearnGate : base.useLearnGate;
+  out.minLearnScore = (cfg && cfg.minLearnScore != null) ? cfg.minLearnScore : base.minLearnScore;
+  out.learnabilityWeight = (cfg && cfg.learnabilityWeight != null) ? cfg.learnabilityWeight : base.learnabilityWeight;
+  out.learnPenaltyMultiplier = (cfg && cfg.learnPenaltyMultiplier != null) ? cfg.learnPenaltyMultiplier : base.learnPenaltyMultiplier;
+
+  const lg = (cfg && cfg.learnabilityGroups);
+  out.learnabilityGroups = Array.isArray(lg) ? lg : base.learnabilityGroups;
+
+  return out;
+}
+
+function sc_readParams_(cfg) {
+  const p = Object.assign({}, sc_defaultConfig_(), cfg || {});
+  return {
+    topN: sc_int_(p.topN, 15, 1, 100),
+    minScore: sc_int_(p.minScore, 6, 0, 9999),
+    recencyDays: sc_int_(p.recencyDays, 365, 0, 3650),
+    capPerTheme: sc_int_(p.capPerTheme, 3, 1, 999),
+    capPerPOI: sc_int_(p.capPerPOI, 3, 1, 999),
+    capPerSource: sc_int_(p.capPerSource, 2, 1, 999),
+    titleWeight: sc_num_(p.titleWeight, 1.2, 0, 10),
+    descWeight: sc_num_(p.descWeight, 1.0, 0, 10),
+
+    scopePenalty: sc_num_(p.scopePenalty, 0.7, 0, 1),
+    phraseBoost: sc_num_(p.phraseBoost, 2.0, 1, 10),
+
+    useLearnGate: (typeof p.useLearnGate === "boolean") ? p.useLearnGate : true,
+    minLearnScore: sc_int_(p.minLearnScore, 8, 0, 9999),
+    learnabilityWeight: sc_num_(p.learnabilityWeight, 1.6, 0, 5),
+    learnPenaltyMultiplier: sc_num_(p.learnPenaltyMultiplier, 0.8, 0, 1),
+    learnabilityGroups: Array.isArray(p.learnabilityGroups) ? p.learnabilityGroups : sc_defaultConfig_().learnabilityGroups
+  };
+}
+
+/* =========================================================
+ * 5) Scoring logic
+ * ========================================================= */
+function sc_score_(titleN, descN, groups, weights, negGroups, negWeights, params, synIdx) {
+  let baseScore = 0;
+  let learnScore = 0;
+  const matched = [];
+
+  const learnSet = sc_arrayToSet_(params.learnabilityGroups || []);
+  const titleSet = sc_tokenSet_(titleN, synIdx);
+  const descSet  = sc_tokenSet_(descN, synIdx);
+
+  for (const k in groups) {
+    const terms = groups[k] || [];
+    if (!terms.length) continue;
+
+    let hits = 0;
+
+    for (const rawTerm of terms) {
+      const termN = sc_normText_(rawTerm);
+      if (!termN) continue;
+
+      if (termN.includes(" ")) {
+        if (titleN.includes(termN)) hits += (params.phraseBoost * params.titleWeight);
+        if (descN.includes(termN))  hits += (params.phraseBoost * params.descWeight);
+        continue;
+      }
+
+      if (sc_hasToken_(titleSet, termN)) hits += (1 * params.titleWeight);
+      if (sc_hasToken_(descSet, termN))  hits += (1 * params.descWeight);
+    }
+
+    if (hits > 0) {
+      const w = Number(weights[k] || 0);
+      const add = hits * w;
+      baseScore += add;
+      if (learnSet[k]) learnScore += add;
+      matched.push(k);
+    }
+  }
+
+  for (const k in (negGroups || {})) {
+    const terms = negGroups[k] || [];
+    if (!terms.length) continue;
+
+    let hits = 0;
+    for (const rawTerm of terms) {
+      const termN = sc_normText_(rawTerm);
+      if (!termN) continue;
+
+      if (termN.includes(" ")) {
+        if (titleN.includes(termN) || descN.includes(termN)) hits++;
+      } else {
+        if (sc_hasToken_(titleSet, termN) || sc_hasToken_(descSet, termN)) hits++;
+      }
+    }
+
+    if (hits > 0) {
+      const w = Number((negWeights && negWeights[k]) || 0);
+      baseScore -= (hits * w);
+    }
+  }
+
+  if (weights.keywordDensity) {
+    const density = Math.min(1, matched.length / 10);
+    baseScore += density * Number(weights.keywordDensity);
+  }
+
+  baseScore = Math.round(baseScore * 100) / 100;
+  learnScore = Math.round(learnScore * 100) / 100;
+
+  const finalScore =
+    Math.round((baseScore + (learnScore * (params.learnabilityWeight - 1))) * 100) / 100;
+
+  return { score: finalScore, baseScore, learnScore, matched };
+}
+
+function sc_normalizeWeights_(w) {
+  const out = {};
+  Object.keys(w || {}).forEach(k => {
+    const v = Number(w[k]);
+    out[k] = Number.isFinite(v) && v >= 0 ? v : 0;
+  });
+  return out;
+}
+
+function sc_normalizeGroups_(g) {
+  const out = {};
+  Object.keys(g || {}).forEach(k => {
+    const arr = g[k];
+    out[k] = Array.isArray(arr) ? arr.map(x => String(x || "").trim()).filter(Boolean) : [];
+  });
+  return out;
+}
+
+/* =========================================================
+ * 6) Caps + writer
+ * ========================================================= */
+function sc_applyCaps_(rows, params) {
+  const cTheme = {};
+  const cPoi = {};
+  const cSource = {};
+  const out = [];
+
+  for (const r of rows) {
+    const theme = r.theme || "";
+    const poi = r.poi || "";
+    const source = r.source || "";
+
+    if (params.capPerTheme && theme) {
+      cTheme[theme] = cTheme[theme] || 0;
+      if (cTheme[theme] >= params.capPerTheme) continue;
+    }
+    if (params.capPerPOI && poi) {
+      cPoi[poi] = cPoi[poi] || 0;
+      if (cPoi[poi] >= params.capPerPOI) continue;
+    }
+    if (params.capPerSource && source) {
+      cSource[source] = cSource[source] || 0;
+      if (cSource[source] >= params.capPerSource) continue;
+    }
+
+    out.push(r);
+    if (theme) cTheme[theme]++;
+    if (poi) cPoi[poi]++;
+    if (source) cSource[source]++;
+  }
+
+  return out;
+}
+
+function sc_writeWeeklyPicks_(sh, rows) {
+  // ✅ SimScore removed (since similarity is removed)
+  const headers = [
+    "Score","BaseScore","LearnScore","InScope",
+    "Title","Link","Date","Source","Theme","POI","MatchedGroups","DescriptionSnippet"
+  ];
+  sh.clearContents();
+  sh.getRange(1,1,1,headers.length).setValues([headers]);
+
+  if (!rows.length) {
+    sh.setFrozenRows(1);
+    return;
+  }
+
+  const vals = rows.map(r => [
+    r.score, r.baseScore, r.learnScore, r.inScope || "",
+    r.title, r.link, r.date, r.source, r.theme, r.poi, r.matched, r.descSnippet
+  ]);
+
+  sh.getRange(2,1,vals.length,headers.length).setValues(vals);
+  sh.setFrozenRows(1);
+  sh.autoResizeColumns(1, headers.length);
+}
+
+/* =========================================================
+ * 7) Utilities
+ * ========================================================= */
+function sc_safeRegex_(pattern) {
+  const p = String(pattern || "").trim();
+  if (!p) return null;
+  try {
+    return new RegExp(p, "i");
+  } catch (e) {
+    Logger.log("Invalid scopeGateRegex, ignoring: " + p + " | " + e);
+    return null;
+  }
+}
+
+function sc_normText_(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sc_tokens_(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[\u2019\u2018]/g, "'")
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/-/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function sc_stem_(w) {
+  const x = String(w || "").toLowerCase().trim();
+  if (!x) return "";
+  if (x.length <= 3) return x;
+  return x
+    .replace(/(ingly|ing|edly|ed|es|s)$/i, "")
+    .replace(/(tion|tions)$/i, "t")
+    .trim();
+}
+
+function sc_buildSynIndex_(synonyms) {
+  const idx = { forward: {}, reverse: {} };
+  const syn = synonyms || {};
+
+  Object.keys(syn).forEach(base => {
+    const baseStem = sc_stem_(base);
+    if (!baseStem) return;
+
+    idx.forward[baseStem] = idx.forward[baseStem] || [];
+
+    const arr = Array.isArray(syn[base]) ? syn[base] : [];
+    arr.forEach(s => {
+      const sStem = sc_stem_(String(s || ""));
+      if (!sStem) return;
+
+      idx.forward[baseStem].push(sStem);
+      idx.reverse[sStem] = idx.reverse[sStem] || [];
+      idx.reverse[sStem].push(baseStem);
+    });
+  });
+
+  return idx;
+}
+
+function sc_tokenSet_(text, synIdx) {
+  const set = {};
+  const toks = sc_tokens_(text);
+
+  toks.forEach(t => {
+    const stem = sc_stem_(t);
+    if (!stem) return;
+
+    set[stem] = true;
+
+    const fwd = synIdx && synIdx.forward ? synIdx.forward[stem] : null;
+    if (fwd && fwd.length) fwd.forEach(x => (set[x] = true));
+
+    const rev = synIdx && synIdx.reverse ? synIdx.reverse[stem] : null;
+    if (rev && rev.length) rev.forEach(x => (set[x] = true));
+  });
+
+  return set;
+}
+
+function sc_hasToken_(set, term) {
+  const stem = sc_stem_(term);
+  return !!(stem && set && set[stem]);
+}
+
+function sc_arrayToSet_(arr) {
+  const s = {};
+  (arr || []).forEach(x => {
+    const k = String(x || "").trim();
+    if (k) s[k] = true;
+  });
+  return s;
+}
+
+function sc_fmtDate_(v) {
+  if (!v) return "";
+  if (Object.prototype.toString.call(v) === "[object Date]" && !isNaN(v)) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  return String(v);
+}
+
+function sc_withinDays_(dateVal, days) {
+  if (!days || days <= 0) return true;
+
+  let d = null;
+  if (Object.prototype.toString.call(dateVal) === "[object Date]" && !isNaN(dateVal)) {
+    d = dateVal;
+  } else {
+    const parsed = new Date(dateVal);
+    if (!isNaN(parsed)) d = parsed;
+  }
+  if (!d) return true;
+
+  const now = new Date();
+  const diffDays = (now.getTime() - d.getTime()) / (1000*60*60*24);
+  return diffDays <= days;
+}
+
+function sc_int_(n, def, lo, hi) {
+  n = Math.round(Number(n));
+  if (!Number.isFinite(n)) n = def;
+  if (Number.isFinite(lo)) n = Math.max(lo, n);
+  if (Number.isFinite(hi)) n = Math.min(hi, n);
+  return n;
+}
+
+function sc_num_(n, def, lo, hi) {
+  n = Number(n);
+  if (!Number.isFinite(n)) n = def;
+  if (Number.isFinite(lo)) n = Math.max(lo, n);
+  if (Number.isFinite(hi)) n = Math.min(hi, n);
+  return n;
+}
+
+/* =========================================================
+ * 8) Key-Value sheet helpers
+ * ========================================================= */
+function readKeyValueSheet_(sheetName) {
+  const ss = getSpreadsheet_();
+  let sh = ss.getSheetByName(sheetName);
+  if (!sh) sh = ss.insertSheet(sheetName);
+  if (sh.getLastRow() === 0) sh.getRange(1,1,1,2).setValues([["Key","Value"]]);
+
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return {};
+  const vals = sh.getRange(2,1,lastRow-1,2).getValues();
+
+  const map = {};
+  vals.forEach(r => {
+    const k = String(r[0] || "").trim();
+    if (k) map[k] = r[1];
+  });
+  return map;
+}
+
+function upsertKeyValue_(sheetName, key, value) {
+  const ss = getSpreadsheet_();
+  let sh = ss.getSheetByName(sheetName);
+  if (!sh) sh = ss.insertSheet(sheetName);
+  if (sh.getLastRow() === 0) sh.getRange(1,1,1,2).setValues([["Key","Value"]]);
+
+  const lastRow = sh.getLastRow();
+  const vals = lastRow >= 2 ? sh.getRange(2,1,lastRow-1,2).getValues() : [];
+
+  for (let i = 0; i < vals.length; i++) {
+    if (String(vals[i][0] || "").trim() === key) {
+      sh.getRange(2+i, 2).setValue(value);
+      return;
+    }
+  }
+  sh.appendRow([key, value]);
+}
+
+/* =========================================================
+ * 9) Optional AI config generator hook (supports baseline)
+ * ========================================================= */
+function ui_generateScoringConfigFromAI_v1(userPrompt, baselineJsonText) {
+  let existing = sc_getConfigSafe_();
+
+  const b = String(baselineJsonText || "").trim();
+  if (b) {
+    try { existing = sc_mergeDefaults_(JSON.parse(b)); } catch (_) {}
+  }
+
+  const taxonomy = (typeof getTaxonomyFromThemeRules_ === "function")
+    ? getTaxonomyFromThemeRules_()
+    : null;
+
+  const cfgObj = ai_generateScoringConfig_(userPrompt || "", existing, taxonomy);
+  return { ok: true, jsonText: JSON.stringify(cfgObj, null, 2) };
+}
