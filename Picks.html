@@ -1,0 +1,352 @@
+<!-- Weekly Picks (Gemini AI Generate Config UI + Weekly Picks only) -->
+
+<div class="picksRoot">
+  <h2>Weekly Picks</h2>
+
+  <div class="grid">
+    <!-- LEFT: Config -->
+    <div class="card">
+      <h3>Scoring Config (JSON)</h3>
+      <p class="muted">Edit the config JSON directly. Save → Run scoring → Refresh picks.</p>
+
+      <!-- ✅ AI Prompt + options -->
+      <div class="aiBlock">
+        <div class="aiRow">
+          <textarea id="aiPrompt" rows="3"
+            placeholder='Ask Gemini to generate/adjust config. Examples:
+- Increase recall (more picks), lower minScore slightly
+- Reduce AI hype, focus on manpower policy + layoffs + wages
+- Add more reskilling/training terms; tighten scope gate to workplace only'
+            spellcheck="false"></textarea>
+
+          <button id="btn_aiGen" class="btn" onclick="picks_generateConfigAI()">Generate via Gemini</button>
+        </div>
+
+        <div class="aiOptions">
+          <label class="chk">
+            <input type="checkbox" id="aiUseBaseline" checked>
+            Use current JSON as baseline
+          </label>
+
+          <button class="btn" onclick="picks_clearPrompt()">Clear prompt</button>
+        </div>
+
+        <div id="ai_status" class="muted" style="margin:6px 0 10px 0;"></div>
+      </div>
+
+      <textarea id="cfg_json" rows="18" spellcheck="false"></textarea>
+
+      <div class="btnRow">
+        <button class="btn" onclick="picks_reloadConfig()">Reload</button>
+        <button class="btnPrimary" onclick="picks_saveConfig()">Save JSON</button>
+        <button class="btn" onclick="picks_runScoring()">Run Scoring Now</button>
+        <button class="btn" onclick="picks_refresh()">Refresh Picks</button>
+      </div>
+
+      <pre id="cfg_status" class="pre"></pre>
+    </div>
+
+    <!-- RIGHT: Weekly Picks -->
+    <div class="card">
+      <h3>Top Picks (Weekly Picks sheet)</h3>
+      <div class="row">
+        <label>Quick filter</label>
+        <input id="filterText" type="text" placeholder="search..." oninput="picks_renderFiltered()">
+      </div>
+      <div id="picks_tableWrap" class="tableWrap"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .picksRoot { padding: 16px; font-family: Arial, sans-serif; }
+  .picksRoot .grid {
+    display: grid;
+    grid-template-columns: 520px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1200px){
+    .picksRoot .grid { grid-template-columns: 1fr; }
+  }
+
+  .picksRoot .card { background: #111; color: #eee; border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px; }
+  .picksRoot h2, .picksRoot h3 { margin: 0 0 10px 0; }
+
+  .picksRoot .row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin: 8px 0; }
+  .picksRoot label { font-size: 12px; color: #bbb; }
+  .picksRoot input, .picksRoot textarea { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #333; background: #0b0b0b; color: #eee; }
+
+  .picksRoot textarea {
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+  }
+
+  .picksRoot .btnRow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .picksRoot .btn, .picksRoot .btnPrimary {
+    padding: 8px 10px; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: #eee; cursor: pointer;
+  }
+  .picksRoot .btnPrimary { background: rgba(99,102,241,.25); border-color: rgba(99,102,241,.5); }
+  .picksRoot .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .picksRoot .muted { color: #aaa; font-size: 12px; margin-top: 0; }
+  .picksRoot .pre { background: #0b0b0b; border: 1px solid #333; border-radius: 10px; padding: 10px; overflow: auto; max-height: 160px; white-space: pre-wrap; }
+
+  .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; }
+  .picksRoot table { border-collapse: collapse; width: 100%; }
+  .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
+  .picksRoot th { position: sticky; top: 0; background: #151515; z-index: 1; text-align: left; }
+  .picksRoot a { color: #9bd; }
+
+  /* ✅ AI block */
+  .picksRoot .aiBlock { margin: 8px 0 10px 0; }
+  .picksRoot .aiRow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: start;
+    margin: 8px 0;
+  }
+  .picksRoot .aiOptions{
+    display:flex;
+    gap:12px;
+    align-items:center;
+    justify-content: space-between;
+    margin-top: 4px;
+  }
+  .picksRoot .chk{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    font-size:12px;
+    color:#bbb;
+    user-select:none;
+  }
+  .picksRoot .chk input{ width:auto; padding:0; }
+</style>
+
+<script>
+  let PICKS_ROWS = [];
+  let PICKS_HEADERS = [];
+
+  function __init_picks() {
+    picks_reloadConfig();
+    picks_refresh();
+
+    const p = document.getElementById("aiPrompt");
+    if (p) {
+      p.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          picks_generateConfigAI();
+        }
+      });
+    }
+  }
+
+  function picks_setStatus(msg) {
+    const el = document.getElementById("cfg_status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function picks_setAiStatus(msg) {
+    const el = document.getElementById("ai_status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function picks_setAiBusy(isBusy) {
+    const btn = document.getElementById("btn_aiGen");
+    const inp = document.getElementById("aiPrompt");
+    const chk = document.getElementById("aiUseBaseline");
+    if (btn) btn.disabled = !!isBusy;
+    if (inp) inp.disabled = !!isBusy;
+    if (chk) chk.disabled = !!isBusy;
+    if (btn) btn.textContent = isBusy ? "Generating..." : "Generate via Gemini";
+  }
+
+  function picks_clearPrompt() {
+    const p = document.getElementById("aiPrompt");
+    if (p) p.value = "";
+    picks_setAiStatus("");
+  }
+
+  function isValidJson(text){
+    try { JSON.parse(String(text || "")); return true; } catch (_) { return false; }
+  }
+
+  function picks_generateConfigAI() {
+    const promptEl = document.getElementById("aiPrompt");
+    const userPrompt = (promptEl ? promptEl.value : "").trim();
+
+    const useBaseline = !!document.getElementById("aiUseBaseline")?.checked;
+
+    let baselineJsonText = "";
+    if (useBaseline) {
+      baselineJsonText = document.getElementById("cfg_json")?.value || "";
+      if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
+        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck “Use current JSON as baseline”) then try again.");
+        return;
+      }
+    }
+
+    picks_setAiBusy(true);
+    picks_setAiStatus("Calling Gemini to generate a scoring config...");
+
+    google.script.run
+      .withSuccessHandler(res => {
+        try {
+          if (!res || res.ok !== true || !res.jsonText) {
+            picks_setAiStatus("Gemini returned no config. Try a clearer prompt.");
+            return;
+          }
+          if (!isValidJson(res.jsonText)) {
+            picks_setAiStatus("Gemini returned invalid JSON (blocked). Try again with a stricter prompt.");
+            return;
+          }
+
+          const ta = document.getElementById("cfg_json");
+          if (ta) ta.value = res.jsonText;
+
+          picks_setAiStatus("Generated ✅ Review the JSON, then click “Save JSON”.");
+        } catch (err) {
+          console.error(err);
+          picks_setAiStatus("UI error: " + (err.message || err));
+        } finally {
+          picks_setAiBusy(false);
+        }
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setAiStatus("Gemini failed: " + (e.message || e));
+        picks_setAiBusy(false);
+      })
+      .ui_generateScoringConfigFromAI_v1(userPrompt, baselineJsonText);
+  }
+
+  function picks_reloadConfig() {
+    picks_setStatus("Loading config...");
+    google.script.run
+      .withSuccessHandler(res => {
+        const ta = document.getElementById("cfg_json");
+        if (ta) ta.value = res.jsonText || "";
+        picks_setStatus("Loaded ✅");
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setStatus("Load failed: " + (e.message || e));
+      })
+      .ui_getScoringConfig_v1();
+  }
+
+  function picks_saveConfig() {
+    const ta = document.getElementById("cfg_json");
+    const txt = ta ? ta.value : "";
+    picks_setStatus("Saving...");
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.savedText && ta) ta.value = res.savedText;
+        picks_setStatus("Saved ✅");
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setStatus("Save failed: " + (e.message || e));
+      })
+      .ui_saveScoringConfigJson_v1(txt);
+  }
+
+  function picks_runScoring() {
+    picks_setStatus("Running scoring...");
+    google.script.run
+      .withSuccessHandler(msg => {
+        picks_setStatus((msg || "Scoring done ✅") + "\nRefreshing picks...");
+        picks_refresh();
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setStatus("Scoring failed: " + (e.message || e));
+      })
+      .ui_runScoringNow_v1();
+  }
+
+  function picks_refresh() {
+    picks_setStatus("Refreshing picks...");
+    google.script.run
+      .withSuccessHandler(data => {
+        try {
+          PICKS_HEADERS = data.headers || [];
+          PICKS_ROWS = data.rows || [];
+          picks_renderFiltered();
+          picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
+        } catch (err) {
+          console.error(err);
+          picks_setStatus("Render failed: " + (err.message || err));
+        }
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setStatus("Refresh failed: " + (e.message || e));
+      })
+      .ui_getWeeklyPicks_v1();
+  }
+
+  function picks_renderFiltered() {
+    const inp = document.getElementById("filterText");
+    const q = (inp ? inp.value : "").toLowerCase();
+
+    const rows = !q
+      ? PICKS_ROWS
+      : PICKS_ROWS.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+
+    const wrap = document.getElementById("picks_tableWrap");
+    if (!wrap) return;
+
+    if (!rows.length) {
+      wrap.innerHTML = "<div style='padding:10px;color:#aaa'>No rows.</div>";
+      return;
+    }
+
+    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(rows[0]);
+
+    let html = "<table><thead><tr>";
+    headers.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
+    html += "</tr></thead><tbody>";
+
+    rows.forEach(r => {
+      html += "<tr>";
+      headers.forEach(h => {
+        const v = r[h] == null ? "" : String(r[h]);
+        if (isLikelyUrl(v)) {
+          html += `<td><a href="${escapeAttr(v)}" target="_blank" rel="noreferrer">open</a></td>`;
+        } else {
+          html += `<td>${escapeHtml(v)}</td>`;
+        }
+      });
+      html += "</tr>";
+    });
+
+    html += "</tbody></table>";
+    wrap.innerHTML = html;
+  }
+
+  // ===== Utils =====
+  function isLikelyUrl(s){
+    s = String(s || "").trim().toLowerCase();
+    return s.startsWith("http://") || s.startsWith("https://");
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  window.addEventListener("error", (ev) => {
+    console.error(ev.error || ev);
+    picks_setStatus("UI error: " + (ev.message || "unknown"));
+  });
+</script>
