@@ -1,0 +1,678 @@
+<div id="rules-root" style="padding:12px;">
+  <style>
+    .rules-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px;}
+    .rules-header h2{margin:0;font-size:14px;}
+    .rules-meta{color:#a7afc0;font-size:12px;}
+    .btn{border-radius:999px;border:1px solid rgba(255,255,255,.10);background: rgba(255,255,255,.05);color:#e8eaf0;padding:10px 12px;font-size:12px;cursor:pointer;}
+    .btn.primary{border-color: rgba(122,162,255,.45);background: rgba(122,162,255,.16);}
+    .btn.tiny{padding:7px 10px;font-size:11px;}
+    .btn:disabled{opacity:.5;cursor:not-allowed;}
+
+    .rules-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin: 6px 0 12px;}
+    .rules-controls .grow{flex:1;min-width:240px;}
+    .pill{
+      border-radius:999px;border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);color:#e8eaf0;
+      padding:8px 10px;font-size:12px;outline:none;
+    }
+
+    .rules-table{width:100%;border-collapse:collapse;font-size:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;}
+    .rules-table th{background: rgba(17,21,34,.90);color:#a7afc0;text-align:left;padding:10px;border-bottom:1px solid rgba(255,255,255,.10);font-weight:600;position:sticky;top:0;white-space:nowrap;z-index:2;}
+    .rules-table td{padding:10px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;}
+    .rules-table tr:nth-child(2n) td{background: rgba(255,255,255,.02);}
+    .rules-table tr.dirty td{outline: 1px solid rgba(122,162,255,.15);}
+    .rules-table tr.inactive td{opacity:.55;}
+
+    input[type="text"], textarea, select{
+      width:100%;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      color:#e8eaf0;
+      border-radius:10px;
+      padding:8px 10px;
+      font-size:12px;
+      outline:none;
+      box-sizing:border-box;
+    }
+    textarea{resize:vertical;min-height:120px;line-height:1.35;}
+    select{cursor:pointer;}
+    .cell-tight{min-width:220px;}
+    .cell-wide{min-width:360px;max-width:520px;}
+    .status{margin-top:10px;color:#a7afc0;font-size:12px;white-space:pre-wrap;}
+    .dirtyMark{color:#7aa2ff;font-size:11px;margin-left:6px;display:none;}
+
+    /* Group header row */
+    .groupRow td{
+      background: rgba(255,255,255,.03) !important;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:10px;
+    }
+    .groupHead{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    }
+    .groupLeft{display:flex;align-items:center;gap:10px;}
+    .groupBtn{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      color:#e8eaf0;
+      border-radius:12px;
+      padding:7px 10px;
+      font-size:12px;
+      cursor:pointer;
+      display:flex;align-items:center;gap:8px;
+    }
+    .groupCount{color:#a7afc0;font-size:12px;}
+
+    /* Keyword chips */
+    .kwWrap{display:flex;flex-direction:column;gap:6px;}
+    .kwChips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+    .chip{
+      padding:4px 8px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      color:#d7dbea;font-size:11px;
+      max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+    .kwMeta{color:#a7afc0;font-size:11px;}
+
+    /* Toggle */
+    .toggleRow{display:flex;align-items:center;gap:10px;}
+    .switch{position:relative;display:inline-block;width:42px;height:22px;}
+    .switch input{opacity:0;width:0;height:0;}
+    .slider{
+      position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+      background: rgba(255,255,255,.12);
+      transition:.2s;border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .slider:before{
+      position:absolute;content:"";height:16px;width:16px;left:3px;top:2px;
+      background:#e8eaf0;transition:.2s;border-radius:999px;opacity:.9;
+    }
+    input:checked + .slider{
+      background: rgba(122,162,255,.25);
+      border-color: rgba(122,162,255,.35);
+    }
+    input:checked + .slider:before{transform: translateX(20px);}
+    .actLabel{font-size:11px;color:#a7afc0;}
+
+    /* Modal */
+    .modalBack{
+      position:fixed;inset:0;background: rgba(0,0,0,.55);
+      display:none;align-items:center;justify-content:center;z-index:9999;
+      padding:16px;
+    }
+    .modal{
+      width:min(720px, 96vw);
+      background: rgba(17,21,34,.96);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+      overflow:hidden;
+    }
+    .modalHead{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .modalTitle{font-size:13px;color:#e8eaf0;}
+    .modalBody{padding:14px;display:flex;flex-direction:column;gap:10px;}
+    .modalTools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .modalFoot{
+      padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);
+      display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    }
+    .hint{color:#a7afc0;font-size:11px;}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  </style>
+
+  <!-- dropdown suggestion lists (still typeable) -->
+  <datalist id="theme-options"></datalist>
+  <datalist id="poi-options"></datalist>
+
+  <div class="rules-header">
+    <div>
+      <h2>Theme Rules</h2>
+      <div class="rules-meta" id="rules-meta">Loading…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn" onclick="rules_reload()">Reload</button>
+      <button class="btn" onclick="rules_add()">Add row</button>
+      <button class="btn primary" id="rules-saveBtn" onclick="rules_save()" disabled>Save changes</button>
+    </div>
+  </div>
+
+  <!-- ✅ NEW: Search + filters -->
+  <div class="rules-controls">
+    <input id="rules-q" class="pill grow" type="text"
+           placeholder="Search theme / POI / keyword…"
+           oninput="rules_render()" />
+
+    <select id="rules-filter-theme" class="pill" style="width:200px;" onchange="rules_render()">
+      <option value="__all__">All Themes</option>
+    </select>
+
+    <select id="rules-filter-poi" class="pill" style="width:240px;" onchange="rules_render()">
+      <option value="__all__">All POIs</option>
+    </select>
+
+    <select id="rules-filter-active" class="pill" style="width:150px;" onchange="rules_render()">
+      <option value="__all__">All</option>
+      <option value="active">Active only</option>
+      <option value="inactive">Inactive only</option>
+    </select>
+
+    <button class="btn" onclick="rules_clearFilters()">Clear</button>
+  </div>
+
+  <table class="rules-table">
+    <thead>
+      <tr>
+        <th style="width:240px;">Theme</th>
+        <th style="width:280px;">Point of Interest</th>
+        <th>Keywords</th>
+        <th style="width:120px;">Active</th>
+      </tr>
+    </thead>
+    <tbody id="rules-body"></tbody>
+  </table>
+
+  <div class="status" id="rules-status"></div>
+
+  <!-- ✅ Keyword editor modal -->
+  <div id="kw-back" class="modalBack" onclick="rules_kwBackdrop(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modalHead">
+        <div class="modalTitle" id="kw-title">Edit keywords</div>
+        <button class="btn tiny" onclick="rules_kwClose()">Close</button>
+      </div>
+      <div class="modalBody">
+        <div class="hint">
+          Tips: separate by commas or new lines. We’ll normalise when showing chips.
+          <span id="kw-count" style="margin-left:8px;"></span>
+        </div>
+
+        <div class="modalTools">
+          <button class="btn tiny" onclick="rules_kwDedup()">Deduplicate</button>
+          <button class="btn tiny" onclick="rules_kwSort()">Sort A→Z</button>
+          <button class="btn tiny" onclick="rules_kwClean()">Trim / remove blanks</button>
+          <button class="btn tiny" onclick="rules_kwNewlinesToCommas()">New lines → commas</button>
+        </div>
+
+        <textarea id="kw-text" class="mono" placeholder="e.g. wage floor, minimum wage, low-wage workers"></textarea>
+        <div class="hint">Changes are staged. Click “Save changes” on the main page to commit to the sheet.</div>
+      </div>
+      <div class="modalFoot">
+        <div class="hint" id="kw-rowhint"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="rules_kwClose()">Cancel</button>
+          <button class="btn primary" onclick="rules_kwApply()">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__init_rules = function(){
+    rules_loadDropdowns(() => rules_reload());
+  };
+
+  const E = (id) => document.getElementById(id);
+  const setStatus = (msg) => E("rules-status").textContent = msg || "";
+
+  let RULES = [];
+  let RULES_MAP = new Map();  // rowIndex -> row
+  let DIRTY = new Set();      // rowIndex
+
+  let LAST_TOTAL = 0;
+  let LAST_SHEET = "";
+  let THEME_ORDER = [];
+
+  // Collapsed themes persisted
+  const COLLAPSE_KEY = "fs_themeRules_collapsed_v1";
+  let COLLAPSED = new Set();
+  try {
+    COLLAPSED = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]"));
+  } catch (e) {}
+
+  function saveCollapsed(){
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(Array.from(COLLAPSED))); } catch(e){}
+  }
+
+  function rules_loadDropdowns(cb){
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res || !res.ok) { setStatus("Dropdowns failed: " + (res?.message || "Unknown")); cb && cb(); return; }
+
+        // datalists (typeable suggestions)
+        const themeDL = E("theme-options");
+        const poiDL = E("poi-options");
+        themeDL.innerHTML = (res.themes || []).map(v => `<option value="${esc(v)}"></option>`).join("");
+        poiDL.innerHTML   = (res.pois || []).map(v => `<option value="${esc(v)}"></option>`).join("");
+
+        // filter selects
+        const themeSel = E("rules-filter-theme");
+        const poiSel = E("rules-filter-poi");
+
+        const themeVal = themeSel.value;
+        const poiVal = poiSel.value;
+
+        themeSel.innerHTML = `<option value="__all__">All Themes</option>` +
+          (res.themes || []).map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+
+        poiSel.innerHTML = `<option value="__all__">All POIs</option>` +
+          (res.pois || []).map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+
+        // restore selection if still exists
+        if ([...themeSel.options].some(o => o.value === themeVal)) themeSel.value = themeVal;
+        if ([...poiSel.options].some(o => o.value === poiVal)) poiSel.value = poiVal;
+
+        cb && cb();
+      })
+      .withFailureHandler(err => { setStatus("Dropdown error: " + (err?.message || JSON.stringify(err))); cb && cb(); })
+      .ui_getThemeRuleDropdowns();
+  }
+
+  function rules_reload(){
+    setStatus("Loading…");
+    E("rules-saveBtn").disabled = true;
+
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res || !res.ok) {
+          setStatus("Failed: " + (res?.message || "Unknown error"));
+          E("rules-meta").textContent = "Error";
+          return;
+        }
+
+        RULES = res.rows || [];
+        RULES_MAP = new Map();
+        THEME_ORDER = [];
+        const seenThemes = new Set();
+
+        RULES.forEach(r => {
+          RULES_MAP.set(r.rowIndex, r);
+          const t = (r.theme || "").trim() || "Unassigned";
+          if (!seenThemes.has(t)) { seenThemes.add(t); THEME_ORDER.push(t); }
+        });
+
+        DIRTY = new Set();
+        LAST_TOTAL = res.totalRows || RULES.length;
+        LAST_SHEET = res.sheet || "";
+
+        rules_render();
+        setStatus("");
+      })
+      .withFailureHandler(err => {
+        setStatus("Error: " + (err?.message || JSON.stringify(err)));
+        E("rules-meta").textContent = "Error";
+      })
+      .ui_getThemeRules();
+  }
+
+  function rules_clearFilters(){
+    E("rules-q").value = "";
+    E("rules-filter-theme").value = "__all__";
+    E("rules-filter-poi").value = "__all__";
+    E("rules-filter-active").value = "__all__";
+    rules_render();
+  }
+
+  function rules_render(){
+    const tbody = E("rules-body");
+
+    const q = (E("rules-q").value || "").trim().toLowerCase();
+    const themeF = E("rules-filter-theme").value;
+    const poiF = E("rules-filter-poi").value;
+    const actF = E("rules-filter-active").value;
+
+    // Filter rows
+    const filtered = RULES.filter(r => {
+      const theme = (r.theme || "").trim();
+      const poi = (r.poi || "").trim();
+      const keywords = (r.keywords || "").trim();
+      const active = !!r.active;
+
+      if (themeF !== "__all__" && theme !== themeF) return false;
+      if (poiF !== "__all__" && poi !== poiF) return false;
+      if (actF === "active" && !active) return false;
+      if (actF === "inactive" && active) return false;
+
+      if (!q) return true;
+      const hay = `${theme} ${poi} ${keywords}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    // Group by theme (preserve order)
+    const groups = new Map(); // themeName -> rows
+    filtered.forEach(r => {
+      const t = (r.theme || "").trim() || "Unassigned";
+      if (!groups.has(t)) groups.set(t, []);
+      groups.get(t).push(r);
+    });
+
+    const orderedThemes = THEME_ORDER.filter(t => groups.has(t));
+    // also include any themes that appeared after edits/adds but not in order list
+    Array.from(groups.keys()).forEach(t => { if (!orderedThemes.includes(t)) orderedThemes.push(t); });
+
+    // meta
+    E("rules-meta").textContent =
+      `${LAST_TOTAL || RULES.length} rules loaded • ${filtered.length} shown • Sheet: ${LAST_SHEET || "ThemeRules"}`;
+
+    // Render
+    let html = "";
+    orderedThemes.forEach(themeName => {
+      const rows = groups.get(themeName) || [];
+      const collapsed = COLLAPSED.has(themeName);
+
+      const activeCount = rows.reduce((n, r) => n + (r.active ? 1 : 0), 0);
+      const caret = collapsed ? "▶" : "▼";
+
+      html += `
+        <tr class="groupRow">
+          <td colspan="4">
+            <div class="groupHead">
+              <div class="groupLeft">
+                <button class="groupBtn" onclick="rules_toggleTheme('${encodeURIComponent(themeName)}')">
+                  <span style="width:14px;display:inline-block;">${caret}</span>
+                  <span>${esc(themeName)}</span>
+                </button>
+                <span class="groupCount">${rows.length} rule(s) • ${activeCount} active</span>
+              </div>
+            </div>
+          </td>
+        </tr>
+      `;
+
+      if (!collapsed) {
+        html += rows.map(r => rowHtml(r)).join("");
+      }
+    });
+
+    tbody.innerHTML = html;
+
+    // Wire listeners for rendered rows
+    filtered.forEach(r => attachRowListeners(r.rowIndex));
+    // Restore dirty visuals
+    DIRTY.forEach(ri => {
+      E(`dirty-${ri}`)?.style && (E(`dirty-${ri}`).style.display = "inline");
+      E(`row-${ri}`)?.classList.add("dirty");
+    });
+  }
+
+  function rules_toggleTheme(encodedTheme){
+    const theme = decodeURIComponent(encodedTheme);
+    if (COLLAPSED.has(theme)) COLLAPSED.delete(theme);
+    else COLLAPSED.add(theme);
+    saveCollapsed();
+    rules_render();
+  }
+
+  function attachRowListeners(ri){
+    const theme = E(`r-theme-${ri}`);
+    const poi = E(`r-poi-${ri}`);
+    const active = E(`r-act-${ri}`);
+
+    if (!theme || theme.__wired) return; // prevent double wiring
+    theme.__wired = true;
+
+    const onChange = () => {
+      syncRowFromDom(ri);
+      markDirty(ri);
+    };
+
+    theme.addEventListener("input", onChange);
+    poi.addEventListener("input", onChange);
+    active.addEventListener("change", () => {
+      syncRowFromDom(ri);
+      // update UI label + inactive styling immediately
+      const r = RULES_MAP.get(ri);
+      E(`actlbl-${ri}`).textContent = r?.active ? "Active" : "Inactive";
+      const tr = E(`row-${ri}`);
+      if (tr) {
+        if (r?.active) tr.classList.remove("inactive");
+        else tr.classList.add("inactive");
+      }
+      markDirty(ri);
+    });
+  }
+
+  function syncRowFromDom(ri){
+    const r = RULES_MAP.get(ri);
+    if (!r) return;
+    const t = E(`r-theme-${ri}`); if (t) r.theme = t.value;
+    const p = E(`r-poi-${ri}`);   if (p) r.poi = p.value;
+    const a = E(`r-act-${ri}`);   if (a) r.active = !!a.checked;
+  }
+
+  function rowHtml(r){
+    const ri = r.rowIndex;
+    const themeTxt = (r.theme || "");
+    const poiTxt = (r.poi || "");
+    const kw = (r.keywords || "");
+    const chips = keywordChipsHtml(kw);
+    const count = keywordList(kw).length;
+
+    const isDirty = DIRTY.has(ri);
+    const dirtyStyle = isDirty ? 'style="display:inline"' : "";
+    const rowClass = [
+      (!r.active ? "inactive" : ""),
+      (isDirty ? "dirty" : "")
+    ].join(" ").trim();
+
+    return `
+      <tr id="row-${ri}" data-rowindex="${ri}" class="${rowClass}">
+        <td class="cell-tight">
+          <input id="r-theme-${ri}" type="text" list="theme-options"
+                 value="${esc(themeTxt)}" placeholder="e.g. Workforce" />
+          <span class="dirtyMark" id="dirty-${ri}" ${dirtyStyle}>• edited</span>
+        </td>
+        <td class="cell-tight">
+          <input id="r-poi-${ri}" type="text" list="poi-options"
+                 value="${esc(poiTxt)}" placeholder="e.g. Jobs/ Employment and skills" />
+        </td>
+        <td class="cell-wide">
+          <div class="kwWrap">
+            <div class="kwChips" id="kwchips-${ri}">
+              ${chips}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="btn tiny" onclick="rules_kwOpen(${ri})">Edit keywords</button>
+              <div class="kwMeta" id="kwmeta-${ri}">${count} keyword(s)</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="toggleRow">
+            <label class="switch">
+              <input id="r-act-${ri}" type="checkbox" ${r.active ? "checked" : ""} />
+              <span class="slider"></span>
+            </label>
+            <div class="actLabel" id="actlbl-${ri}">${r.active ? "Active" : "Inactive"}</div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function markDirty(rowIndex){
+    if (!DIRTY.has(rowIndex)) DIRTY.add(rowIndex);
+    E("rules-saveBtn").disabled = DIRTY.size === 0;
+
+    const dm = E(`dirty-${rowIndex}`);
+    if (dm) dm.style.display = "inline";
+    const tr = E(`row-${rowIndex}`);
+    if (tr) tr.classList.add("dirty");
+  }
+
+  function rules_collectEdits(){
+    const edits = [];
+    DIRTY.forEach(ri => {
+      const r = RULES_MAP.get(ri);
+      if (!r) return;
+      edits.push({
+        rowIndex: ri,
+        theme: r.theme || "",
+        poi: r.poi || "",
+        keywords: r.keywords || "",
+        active: !!r.active
+      });
+    });
+    return edits;
+  }
+
+  function rules_save(){
+    const edits = rules_collectEdits();
+    if (!edits.length) return;
+
+    setStatus("Saving…");
+    E("rules-saveBtn").disabled = true;
+
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res || !res.ok) {
+          setStatus("Failed: " + (res?.message || "Unknown error"));
+          E("rules-saveBtn").disabled = false;
+          return;
+        }
+        setStatus(`Saved ${res.saved} row(s). Reloading…`);
+        rules_loadDropdowns(() => rules_reload());
+      })
+      .withFailureHandler(err => {
+        setStatus("Error: " + (err?.message || JSON.stringify(err)));
+        E("rules-saveBtn").disabled = false;
+      })
+      .ui_saveThemeRules({ edits });
+  }
+
+  function rules_add(){
+    setStatus("Adding row…");
+    google.script.run
+      .withSuccessHandler(res => {
+        if (!res || !res.ok) { setStatus("Failed: " + (res?.message || "Unknown error")); return; }
+
+        // Insert into model
+        RULES.unshift(res.row);
+        RULES_MAP.set(res.row.rowIndex, res.row);
+
+        const t = (res.row.theme || "").trim() || "Unassigned";
+        if (!THEME_ORDER.includes(t)) THEME_ORDER.unshift(t);
+
+        // Mark new row dirty to encourage saving
+        DIRTY.add(res.row.rowIndex);
+        E("rules-saveBtn").disabled = false;
+
+        rules_render();
+        setStatus("Row added. Fill it in, then click Save changes.");
+      })
+      .withFailureHandler(err => setStatus("Error: " + (err?.message || JSON.stringify(err))))
+      .ui_addThemeRule();
+  }
+
+  // ---------- Keyword helpers + modal ----------
+  let KW_RI = null;
+
+  function rules_kwOpen(ri){
+    KW_RI = ri;
+    const r = RULES_MAP.get(ri);
+    const theme = (r?.theme || "").trim() || "Unassigned";
+    const poi = (r?.poi || "").trim() || "(no POI)";
+
+    E("kw-title").textContent = "Edit keywords";
+    E("kw-rowhint").textContent = `Row ${ri} • ${theme} → ${poi}`;
+    E("kw-text").value = r?.keywords || "";
+    rules_kwUpdateCount();
+    E("kw-back").style.display = "flex";
+
+    // live count update
+    setTimeout(() => {
+      E("kw-text").addEventListener("input", rules_kwUpdateCount, { once:false });
+    }, 0);
+  }
+
+  function rules_kwBackdrop(ev){
+    // clicking outside modal closes
+    rules_kwClose();
+  }
+
+  function rules_kwClose(){
+    E("kw-back").style.display = "none";
+    KW_RI = null;
+  }
+
+  function rules_kwApply(){
+    if (KW_RI == null) return;
+    const r = RULES_MAP.get(KW_RI);
+    if (!r) return;
+
+    r.keywords = E("kw-text").value || "";
+    markDirty(KW_RI);
+
+    // update chips in-place if row is visible; otherwise next render will show
+    const chipsEl = E(`kwchips-${KW_RI}`);
+    const metaEl = E(`kwmeta-${KW_RI}`);
+    if (chipsEl) chipsEl.innerHTML = keywordChipsHtml(r.keywords);
+    if (metaEl) metaEl.textContent = `${keywordList(r.keywords).length} keyword(s)`;
+
+    rules_kwClose();
+  }
+
+  function rules_kwUpdateCount(){
+    const n = keywordList(E("kw-text").value || "").length;
+    E("kw-count").textContent = `(${n} keyword(s))`;
+  }
+
+  function keywordList(s){
+    return String(s || "")
+      .split(/[\n,]+/g)
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+
+  function keywordChipsHtml(s){
+    const list = keywordList(s);
+    const show = list.slice(0, 4);
+    const more = list.length - show.length;
+
+    let html = show.map(k => `<span class="chip" title="${esc(k)}">${esc(k)}</span>`).join("");
+    if (more > 0) html += `<span class="chip" title="${more} more">+${more}</span>`;
+    if (!list.length) html = `<span class="kwMeta">No keywords yet</span>`;
+    return html;
+  }
+
+  function rules_kwDedup(){
+    const list = keywordList(E("kw-text").value);
+    const seen = new Set();
+    const out = [];
+    list.forEach(k => { const key = k.toLowerCase(); if (!seen.has(key)) { seen.add(key); out.push(k); } });
+    E("kw-text").value = out.join(", ");
+    rules_kwUpdateCount();
+  }
+
+  function rules_kwSort(){
+    const list = keywordList(E("kw-text").value).sort((a,b) => a.localeCompare(b));
+    E("kw-text").value = list.join(", ");
+    rules_kwUpdateCount();
+  }
+
+  function rules_kwClean(){
+    const list = keywordList(E("kw-text").value);
+    E("kw-text").value = list.join(", ");
+    rules_kwUpdateCount();
+  }
+
+  function rules_kwNewlinesToCommas(){
+    E("kw-text").value = String(E("kw-text").value || "").replace(/\n+/g, ", ");
+    rules_kwUpdateCount();
+  }
+
+  // ---------- Escaping ----------
+  function esc(str){
+    return String(str || "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+</script>
