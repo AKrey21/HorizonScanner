@@ -1,0 +1,200 @@
+/*********************************
+ * UI_RawArticles.gs — Raw Articles UI API
+ *********************************/
+
+/**
+ * Existing endpoint (kept) — paged + query search.
+ * FIXES: paage typo -> page
+ */
+function ui_getRawArticles_v4(opts) {
+  try {
+    opts = opts || {};
+    const page = Math.max(1, Number(opts.page || 1));
+    const pageSize = Math.max(1, Math.min(500, Number(opts.pageSize || 50)));
+    const query = String(opts.query || "").trim().toLowerCase();
+
+    const ss = getSpreadsheet_();
+    const sheetName = getRawArticlesSheetName_();
+    const sh = ss.getSheetByName(sheetName);
+    if (!sh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
+
+    const lastRow = sh.getLastRow();
+    const lastCol = sh.getLastColumn();
+
+    if (lastRow < 1 || lastCol < 1) {
+      return { ok: true, sheet: sheetName, page, pageSize, totalRows: 0, filteredRows: 0, headers: [], rows: [] };
+    }
+
+    // strings only
+    const headers = sh.getRange(1, 1, 1, lastCol).getDisplayValues()[0]
+      .map(s => String(s || "").trim());
+
+    if (lastRow < 2) {
+      return { ok: true, sheet: sheetName, page, pageSize, totalRows: 0, filteredRows: 0, headers, rows: [] };
+    }
+
+    // strings only
+    const dataAll = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues()
+      .map(r => r.map(c => String(c || "")));
+
+    // remove fully empty rows
+    const data = dataAll.filter(r => r.some(c => c.trim() !== ""));
+    const totalRows = data.length;
+
+    let filtered = data;
+    if (query) {
+      filtered = data.filter(r => r.join(" | ").toLowerCase().includes(query));
+    }
+
+    const filteredRows = filtered.length;
+    const maxPage = Math.max(1, Math.ceil(filteredRows / pageSize));
+    const safePage = Math.min(page, maxPage); // ✅ FIXED
+    const start = (safePage - 1) * pageSize;
+
+    return {
+      ok: true,
+      sheet: sheetName,
+      page: safePage,
+      pageSize,
+      totalRows,
+      filteredRows,
+      headers,
+      rows: filtered.slice(start, start + pageSize)
+    };
+
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
+
+/**
+ * NEW endpoint for revamped UI:
+ * - returns rows as objects (title/link/date/source/theme/poi/keywords)
+ * - returns facets (themes/pois/sources/keywords) with counts
+ * - supports your UI to do multi-filter + sort locally
+ */
+function ui_getRawArticles_bootstrap_v1() {
+  try {
+    const ss = getSpreadsheet_();
+    const sheetName = getRawArticlesSheetName_();
+    const sh = ss.getSheetByName(sheetName);
+    if (!sh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
+
+    const lastRow = sh.getLastRow();
+    const lastCol = sh.getLastColumn();
+
+    if (lastRow < 2 || lastCol < 1) {
+      return {
+        ok: true,
+        sheet: sheetName,
+        meta: { total: 0 },
+        facets: { themes: [], pois: [], sources: [], keywords: [] },
+        rows: []
+      };
+    }
+
+    const range = sh.getRange(1, 1, lastRow, lastCol);
+    const display = range.getDisplayValues().map(r => r.map(c => String(c || "").trim()));
+
+    const headers = display[0];
+    const data = display.slice(1).filter(r => r.some(c => c.trim() !== ""));
+
+    const norm = (s) =>
+      String(s || "").trim().toLowerCase()
+        .replace(/\s+/g, " ")
+        .replace(/[_\-]+/g, " ")
+        .replace(/[^\w\s]/g, "");
+
+    const headerMap = {};
+    headers.forEach((h, i) => { const k = norm(h); if (k) headerMap[k] = i; });
+
+    const findCol = (aliases) => {
+      for (const a of aliases) {
+        const k = norm(a);
+        if (k in headerMap) return headerMap[k];
+      }
+      return -1;
+    };
+
+    const idx = {
+      title:    findCol(["title"]),
+      link:     findCol(["link", "url"]),
+      date:     findCol(["date", "published", "published date"]),
+      source:   findCol(["source"]),
+      theme:    findCol(["theme"]),
+      poi:      findCol(["point of interest", "poi", "point_of_interest"]),
+      keywords: findCol(["matching keywords", "keywords", "matching_keyword"])
+    };
+
+    const inc = (obj, key) => { if (!key) return; obj[key] = (obj[key] || 0) + 1; };
+
+    const themeCounts = {};
+    const poiCounts = {};
+    const sourceCounts = {};
+    const keywordCounts = {};
+
+    const splitKeywords = (s) => String(s || "")
+      .split(/[,;|]/g)
+      .map(x => String(x || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    const parseDateMs = (s) => {
+      // your sheet sometimes wraps lines (e.g. "Tue, 20 Jan...\n2026 ... GMT")
+      const cleaned = String(s || "").replace(/\s+/g, " ").trim();
+      const t = Date.parse(cleaned);
+      return isNaN(t) ? 0 : t;
+    };
+
+    const rows = data.map((r, i) => {
+      const title = (idx.title >= 0) ? r[idx.title] : "";
+      const link  = (idx.link  >= 0) ? r[idx.link]  : "";
+      const dateS = (idx.date  >= 0) ? r[idx.date]  : "";
+      const source= (idx.source>= 0) ? r[idx.source]: "";
+      const theme = (idx.theme >= 0) ? r[idx.theme] : "";
+      const poi   = (idx.poi   >= 0) ? r[idx.poi]   : "";
+      const kwS   = (idx.keywords>=0) ? r[idx.keywords] : "";
+
+      const kwList = splitKeywords(kwS);
+
+      inc(themeCounts, theme);
+      inc(poiCounts, poi);
+      inc(sourceCounts, source);
+      kwList.forEach(k => inc(keywordCounts, k));
+
+      return {
+        id: i + 2,
+        title,
+        link,
+        dateDisplay: dateS,
+        dateMs: parseDateMs(dateS),
+        source,
+        theme,
+        poi,
+        keywords: kwS,
+        keywordsList: kwList,
+        searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + kwS).toLowerCase()
+      };
+    });
+
+    const toFacet = (countsObj) => Object.keys(countsObj)
+      .map(k => ({ value: k, count: countsObj[k] }))
+      .sort((a, b) => (b.count - a.count) || a.value.localeCompare(b.value));
+
+    return {
+      ok: true,
+      sheet: sheetName,
+      meta: { total: rows.length },
+      facets: {
+        themes: toFacet(themeCounts),
+        pois: toFacet(poiCounts),
+        sources: toFacet(sourceCounts),
+        keywords: toFacet(keywordCounts)
+      },
+      rows
+    };
+
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
