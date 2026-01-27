@@ -1,0 +1,888 @@
+<div id="raw-root" style="padding:12px;">
+  <style>
+    /* ===== Layout: fill available height from index.html container ===== */
+    #raw-root{
+      height:100%;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .search{
+      flex:1; min-width:240px;
+      display:flex; gap:10px; align-items:center;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      border-radius:999px; padding:10px 12px;
+      color:#e8eaf0;
+    }
+    .search input{ border:0; outline:0; background:transparent; color:#e8eaf0; width:100%; font-size:13px; }
+    .search .hint{ color:#a7afc0; font-size:11px; white-space:nowrap; }
+
+    .btn, select, input[type="date"], input[type="text"]{
+      border-radius:999px; border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color:#e8eaf0;
+      padding:10px 12px; font-size:12px;
+    }
+    .btn{ cursor:pointer; }
+    .btn.primary{ border-color: rgba(122,162,255,.45); background: rgba(122,162,255,.16); }
+    .btn.ghost{ background: transparent; }
+    .btn.mini{ padding:8px 10px; }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .rightControls{
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      margin-left:auto;
+    }
+
+    .pill{
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      font-size: 11px;
+      color:#a7afc0;
+      white-space:nowrap;
+    }
+
+    .notice{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      border-radius:14px;
+      padding:10px 12px;
+      color:#e8eaf0;
+      font-size:12px;
+      white-space:pre-wrap;
+      display:none;
+    }
+    .notice.show{ display:block; }
+    .notice.ok{ border-color: rgba(122,255,170,.30); background: rgba(122,255,170,.10); }
+    .notice.err{ border-color: rgba(255,120,120,.35); background: rgba(255,120,120,.12); }
+    .notice.busy{ border-color: rgba(122,162,255,.35); background: rgba(122,162,255,.10); }
+    .notice.warn{ border-color: rgba(255,210,120,.35); background: rgba(255,210,120,.10); }
+
+    .summaryBar{
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+      border-radius:14px;
+      padding:8px 10px;
+      color:#a7afc0;
+      font-size:12px;
+    }
+    .summaryBar b{ color:#e8eaf0; font-weight:600; }
+    .spacer{ flex:1; }
+
+    /* ===== Main split-pane: sidebar + table ===== */
+    .main{
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      grid-template-columns: 420px 1fr;
+      gap:10px;
+    }
+.side{
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+
+  /* ✅ allow sidebar to scroll instead of clipping */
+  overflow-y:auto;
+  padding-bottom:16px;
+
+  /* optional niceties */
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+    .content{
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    /* Cards */
+    .box{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      border-radius:14px;
+      padding:10px 12px;
+      color:#e8eaf0;
+      min-width:0;
+    }
+    .boxHead{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .label{ font-size:11px; color:#a7afc0; margin-bottom:6px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .row > *{ flex:1 1 160px; min-width: 160px; }
+    .row.tight > *{ flex: 1 1 120px; min-width: 120px; }
+    .row .mini{ flex: 0 0 auto; min-width: 0; }
+
+    /* Chips */
+    .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:2px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color:#e8eaf0;
+      font-size:11px;
+      max-width: 100%;
+    }
+    .chip .x{ cursor:pointer; opacity:.75; font-weight:700; line-height:1; }
+    .chip .x:hover{ opacity:1; }
+
+    /* ===== Table area: expands (no 70vh limiter) ===== */
+    .wrap{
+      flex:1 1 auto;
+      min-height:0;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      overflow:hidden; /* switched by JS depending on Fit screen */
+      background: rgba(255,255,255,.01);
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      table-layout:fixed; /* ✅ avoid horizontal scroll; wrap instead */
+    }
+
+    thead th{
+      position:sticky; top:0; z-index:2;
+      background: rgba(17,21,34,.92);
+      color:#a7afc0; font-weight:600;
+      border-bottom:1px solid rgba(255,255,255,.10);
+      padding:10px;
+      text-align:left;
+      white-space:nowrap;
+    }
+
+    tbody td{
+      border-bottom:1px solid rgba(255,255,255,.06);
+      padding:10px;
+      vertical-align:top;
+      word-break:break-word; /* ✅ wrap long text */
+    }
+    tbody tr:nth-child(2n) td{ background: rgba(255,255,255,.02); }
+    tbody tr:hover td{ background: rgba(122,162,255,.10); }
+
+    a{ color:#7aa2ff; text-decoration:none; word-break:break-word; }
+    a:hover{ text-decoration:underline; }
+
+    .clickable{
+      cursor:pointer;
+      text-decoration: underline;
+      text-decoration-color: rgba(122,162,255,.35);
+      text-underline-offset: 2px;
+    }
+
+    .kw-pill{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      margin: 0 6px 6px 0;
+      font-size: 11px;
+      color:#a7afc0;
+      white-space: nowrap;
+      max-width: 100%;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .pager{
+      display:flex; gap:8px; align-items:center;
+      color:#a7afc0; font-size:12px; flex-wrap: wrap;
+    }
+
+    .meta{ color:#a7afc0; font-size:12px; }
+
+    .empty{
+      padding:18px 14px;
+      color:#a7afc0;
+      font-size:12px;
+      display:none;
+    }
+
+    /* Responsive: stack sidebar above table */
+    @media (max-width: 980px){
+      .main{ grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <!-- Top controls -->
+  <div class="controls">
+    <div class="search">
+      <span style="opacity:.8;">🔎</span>
+      <input id="raw-q" placeholder="Search across title/link/source/theme/poi/keywords..." />
+      <span class="hint" id="raw-qHint"></span>
+      <span class="pill" id="raw-lastRefresh" title="Last table refresh / ingest time">—</span>
+    </div>
+
+    <select id="raw-pageSize" title="Rows per page">
+      <option value="fit" selected>Fit screen</option>
+      <option value="25">25</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+      <option value="200">200</option>
+      <option value="500">500</option>
+    </select>
+
+    <button class="btn primary" onclick="raw_apply(true)">Apply</button>
+    <button class="btn" onclick="raw_clear()">Clear</button>
+
+    <div class="rightControls">
+      <select id="raw-importRange" title="Ingest range">
+        <option value="7" selected>Ingest: last 7 days</option>
+        <option value="30">Ingest: last 30 days</option>
+        <option value="all">Ingest: all time</option>
+      </select>
+
+      <button class="btn primary" id="raw-importBtn" onclick="raw_importRss()">Ingest RSS</button>
+      <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
+    </div>
+  </div>
+
+  <!-- Split area -->
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="side">
+      <div class="summaryBar" id="raw-summary">
+        <span>Active filters: <b>none</b></span>
+        <span class="spacer"></span>
+        <span class="pill" id="raw-resultPill">—</span>
+      </div>
+
+      <div class="box">
+        <div class="boxHead">
+          <div class="label">Sort + Date range (optional)</div>
+          <button class="btn ghost mini" onclick="raw_quickToday()">Today</button>
+        </div>
+        <div class="row">
+          <select id="raw-sort">
+            <option value="dateDesc" selected>Date (newest)</option>
+            <option value="dateAsc">Date (oldest)</option>
+            <option value="sourceAsc">Source (A→Z)</option>
+            <option value="themeAsc">Theme (A→Z)</option>
+            <option value="poiAsc">POI (A→Z)</option>
+            <option value="titleAsc">Title (A→Z)</option>
+          </select>
+          <input id="raw-dateFrom" type="date" title="Date from"/>
+          <input id="raw-dateTo" type="date" title="Date to"/>
+        </div>
+        <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in table to quick-filter</div>
+      </div>
+
+      <div class="box">
+        <div class="label">Facets (type to search → Add)</div>
+
+        <div class="label" style="margin-top:6px;">Theme</div>
+        <div class="row tight">
+          <input id="raw-themeAdd" type="text" list="raw-themeList" placeholder="e.g. Future of Work" />
+          <button class="btn mini" onclick="raw_addFacet('theme')">Add</button>
+        </div>
+        <datalist id="raw-themeList"></datalist>
+        <div class="chips" id="raw-themeChips"></div>
+
+        <div class="label" style="margin-top:10px;">Point of Interest</div>
+        <div class="row tight">
+          <input id="raw-poiAdd" type="text" list="raw-poiList" placeholder="e.g. Jobs/ Employment..." />
+          <button class="btn mini" onclick="raw_addFacet('poi')">Add</button>
+        </div>
+        <datalist id="raw-poiList"></datalist>
+        <div class="chips" id="raw-poiChips"></div>
+
+        <div class="label" style="margin-top:10px;">Source</div>
+        <div class="row tight">
+          <input id="raw-sourceAdd" type="text" list="raw-sourceList" placeholder="e.g. BBC" />
+          <button class="btn mini" onclick="raw_addFacet('source')">Add</button>
+        </div>
+        <datalist id="raw-sourceList"></datalist>
+        <div class="chips" id="raw-sourceChips"></div>
+      </div>
+
+      <div class="box">
+        <div class="label">Keyword filters</div>
+
+        <div class="row" style="margin-top:6px;">
+          <div class="label" style="margin:0;">Include mode</div>
+          <select id="raw-kwMode" style="min-width:140px; flex:0 0 auto;">
+            <option value="any" selected>ANY</option>
+            <option value="all">ALL</option>
+          </select>
+        </div>
+
+        <div class="label" style="margin-top:6px;">Include</div>
+        <div class="row tight">
+          <input id="raw-kwIncAdd" type="text" list="raw-kwList" placeholder="e.g. layoffs" />
+          <button class="btn mini" onclick="raw_addFacet('kwInc')">Add</button>
+        </div>
+        <div class="chips" id="raw-kwIncChips"></div>
+
+        <div class="label" style="margin-top:10px;">Exclude</div>
+        <div class="row tight">
+          <input id="raw-kwExcAdd" type="text" list="raw-kwList" placeholder="e.g. crypto" />
+          <button class="btn mini" onclick="raw_addFacet('kwExc')">Add</button>
+        </div>
+        <datalist id="raw-kwList"></datalist>
+        <div class="chips" id="raw-kwExcChips"></div>
+      </div>
+    </div>
+
+    <!-- Table/content -->
+    <div class="content">
+      <div class="meta" id="raw-meta">Loading…</div>
+
+      <div class="wrap" id="raw-wrap">
+        <table>
+          <thead id="raw-thead"></thead>
+          <tbody id="raw-tbody"></tbody>
+        </table>
+        <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
+      </div>
+
+      <div class="pager">
+        <button class="btn" id="raw-prev" onclick="raw_prev()">◀ Prev</button>
+        <span id="raw-pageInfo">Page —</span>
+        <button class="btn" id="raw-next" onclick="raw_next()">Next ▶</button>
+        <span class="pill" id="raw-showing" title="Rows shown on this page">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="notice" id="raw-notice"></div>
+</div>
+
+<script>
+  window.__init_raw = function() { raw_bootstrap(); };
+
+  let rawState = {
+    rpcSeq: 0,
+    ingestTicker: null,
+
+    boot: null,
+    allRows: [],
+    filtered: [],
+
+    page: 1,
+    pageSize: 25,
+
+    selTheme: new Set(),
+    selPoi: new Set(),
+    selSource: new Set(),
+    selKwInc: new Set(),
+    selKwExc: new Set(),
+
+    rowH: 44 // used for Fit screen estimate; refined after render
+  };
+
+  const R = (id) => document.getElementById(id);
+
+  function raw_notice(type, msg){
+    const box = R("raw-notice");
+    box.className = "notice show " + (type || "");
+    box.textContent = msg || "";
+  }
+  function raw_noticeClear(){
+    const box = R("raw-notice");
+    box.className = "notice";
+    box.textContent = "";
+  }
+
+  function raw_escape(str){
+    return String(str)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+  function raw_attr(str){ return encodeURIComponent(String(str || "")); }
+  function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
+
+  function raw_setBusyUI(isBusy){
+    R("raw-importBtn").disabled = !!isBusy;
+    R("raw-refreshBtn").disabled = !!isBusy;
+  }
+
+  function raw_runRpc(label, invokeFn, onSuccess, onFailure, opts){
+    opts = opts || {};
+    const warnAfterMs = Number(opts.warnAfterMs || 15000);
+    const hardTimeoutMs = Number(opts.hardTimeoutMs || 120000);
+
+    const seq = ++rawState.rpcSeq;
+    const start = Date.now();
+
+    const warnTimer = setTimeout(() => {
+      if (seq !== rawState.rpcSeq) return;
+      raw_notice("warn", `⏳ ${label} is still running… Elapsed: ${Math.round((Date.now()-start)/1000)}s`);
+      R("raw-lastRefresh").textContent = "Running…";
+    }, warnAfterMs);
+
+    const hardTimer = setTimeout(() => {
+      if (seq !== rawState.rpcSeq) return;
+      raw_notice("err",
+        `⚠️ ${label} is taking unusually long.\n` +
+        `Elapsed: ${Math.round((Date.now()-start)/1000)}s\n\n` +
+        `Check Apps Script → Executions for errors/timeouts.`
+      );
+      R("raw-lastRefresh").textContent = "Timed out";
+    }, hardTimeoutMs);
+
+    const gs = google.script.run
+      .withSuccessHandler((res) => {
+        if (seq !== rawState.rpcSeq) return;
+        clearTimeout(warnTimer);
+        clearTimeout(hardTimer);
+        onSuccess(res);
+      })
+      .withFailureHandler((err) => {
+        if (seq !== rawState.rpcSeq) return;
+        clearTimeout(warnTimer);
+        clearTimeout(hardTimer);
+        onFailure(err);
+      });
+
+    invokeFn(gs);
+  }
+
+  // ----- chips helpers -----
+  function raw_addToSet(setObj, value){
+    const v = String(value || "").trim();
+    if (!v) return;
+    setObj.add(v);
+  }
+  function raw_removeFromSet(setObj, value){ setObj.delete(value); }
+
+  function raw_renderChips(setObj, chipsElId, onRemove){
+    const el = R(chipsElId);
+    const arr = Array.from(setObj.values());
+    el.innerHTML = arr.map(v => `
+      <span class="chip">
+        <span>${raw_escape(v)}</span>
+        <span class="x" data-v="${raw_attr(v)}">×</span>
+      </span>
+    `).join("");
+
+    el.querySelectorAll(".x").forEach(x => {
+      x.addEventListener("click", () => {
+        const v = raw_unattr(x.getAttribute("data-v"));
+        onRemove(v);
+      });
+    });
+  }
+
+  function raw_renderAllChips(){
+    raw_renderChips(rawState.selTheme, "raw-themeChips", (v)=>{ raw_removeFromSet(rawState.selTheme,v); raw_apply(true); });
+    raw_renderChips(rawState.selPoi, "raw-poiChips", (v)=>{ raw_removeFromSet(rawState.selPoi,v); raw_apply(true); });
+    raw_renderChips(rawState.selSource, "raw-sourceChips", (v)=>{ raw_removeFromSet(rawState.selSource,v); raw_apply(true); });
+    raw_renderChips(rawState.selKwInc, "raw-kwIncChips", (v)=>{ raw_removeFromSet(rawState.selKwInc,v); raw_apply(true); });
+    raw_renderChips(rawState.selKwExc, "raw-kwExcChips", (v)=>{ raw_removeFromSet(rawState.selKwExc,v); raw_apply(true); });
+  }
+
+  function raw_fillDatalist(listId, facets){
+    const dl = R(listId);
+    dl.innerHTML = "";
+    (facets || []).forEach(it => {
+      const opt = document.createElement("option");
+      opt.value = it.value;
+      opt.label = it.count ? `${it.value} (${it.count})` : it.value;
+      dl.appendChild(opt);
+    });
+  }
+
+  function raw_parseDateInputMs(id, endOfDay){
+    const v = (R(id).value || "").trim();
+    if (!v) return null;
+    const d = new Date(v + "T00:00:00");
+    if (endOfDay) d.setHours(23,59,59,999);
+    const t = d.getTime();
+    return isNaN(t) ? null : t;
+  }
+
+  function raw_addFacet(kind){
+    const map = {
+      theme: { input:"raw-themeAdd", set: rawState.selTheme, norm: (s)=>String(s||"").trim() },
+      poi:   { input:"raw-poiAdd", set: rawState.selPoi, norm: (s)=>String(s||"").trim() },
+      source:{ input:"raw-sourceAdd", set: rawState.selSource, norm: (s)=>String(s||"").trim() },
+      kwInc: { input:"raw-kwIncAdd", set: rawState.selKwInc, norm: (s)=>String(s||"").trim().toLowerCase() },
+      kwExc: { input:"raw-kwExcAdd", set: rawState.selKwExc, norm: (s)=>String(s||"").trim().toLowerCase() },
+    };
+    const cfg = map[kind];
+    if (!cfg) return;
+
+    const valRaw = (R(cfg.input).value || "");
+    const val = cfg.norm(valRaw);
+    if (!val) return;
+
+    raw_addToSet(cfg.set, val);
+    R(cfg.input).value = "";
+    raw_renderAllChips();
+    raw_apply(true);
+  }
+
+  function raw_computeFitPageSize(){
+    const wrap = R("raw-wrap");
+    if (!wrap) return 25;
+
+    const theadH = (R("raw-thead")?.offsetHeight || 38);
+    const h = wrap.clientHeight || 0;
+    const usable = Math.max(120, h - theadH - 14);
+
+    const rowH = Math.max(32, Number(rawState.rowH || 44));
+    return Math.max(5, Math.floor(usable / rowH));
+  }
+
+  function raw_getSelectedPageSize(){
+    const v = (R("raw-pageSize").value || "50").trim();
+    if (v === "fit") return raw_computeFitPageSize();
+    const n = Number(v);
+    return (isFinite(n) && n > 0) ? n : 50;
+  }
+
+  function raw_syncWrapOverflow(){
+    const v = (R("raw-pageSize").value || "").trim();
+    // If Fit screen, we aim for no table scroll (pagination only)
+    R("raw-wrap").style.overflow = (v === "fit") ? "hidden" : "auto";
+  }
+
+  function raw_bootstrap(){
+    raw_notice("busy", "🔄 Loading table…");
+
+    raw_runRpc(
+      "Loading table",
+      (gs) => gs.ui_getRawArticles_bootstrap_v1(),
+      (res) => {
+        if (!res || !res.ok) {
+          raw_notice("err", "❌ Failed:\n" + (res?.message || JSON.stringify(res, null, 2)));
+          return;
+        }
+
+        rawState.boot = res;
+        rawState.allRows = res.rows || [];
+        rawState.page = 1;
+
+        raw_fillDatalist("raw-themeList",  res.facets?.themes || []);
+        raw_fillDatalist("raw-poiList",    res.facets?.pois || []);
+        raw_fillDatalist("raw-sourceList", res.facets?.sources || []);
+        raw_fillDatalist("raw-kwList",     res.facets?.keywords || []);
+
+        // header (fixed)
+        R("raw-thead").innerHTML =
+          "<tr>" +
+          "<th style='width:38%'>Title</th>" +
+          "<th style='width:14%'>Date</th>" +
+          "<th style='width:12%'>Source</th>" +
+          "<th style='width:12%'>Theme</th>" +
+          "<th style='width:16%'>Point of Interest</th>" +
+          "<th style='width:18%'>Matching Keywords</th>" +
+          "</tr>";
+
+        raw_renderAllChips();
+        raw_apply(true);
+      },
+      (err) => {
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Table load error:\n" + msg);
+      },
+      { warnAfterMs: 15000, hardTimeoutMs: 120000 }
+    );
+  }
+
+  function raw_apply(resetToFirstPage){
+    if (resetToFirstPage) rawState.page = 1;
+
+    raw_syncWrapOverflow();
+
+    rawState.pageSize = raw_getSelectedPageSize();
+    const q = (R("raw-q").value || "").trim().toLowerCase();
+    R("raw-qHint").textContent = q ? "Press Enter to apply faster" : "";
+
+    const fromMs = raw_parseDateInputMs("raw-dateFrom", false);
+    const toMs   = raw_parseDateInputMs("raw-dateTo", true);
+
+    const themes = rawState.selTheme;
+    const pois   = rawState.selPoi;
+    const sources= rawState.selSource;
+    const kwInc  = rawState.selKwInc;
+    const kwExc  = rawState.selKwExc;
+    const kwMode = (R("raw-kwMode").value || "any");
+
+    let filtered = rawState.allRows.filter(r => {
+      if (themes.size && !themes.has(r.theme)) return false;
+      if (pois.size && !pois.has(r.poi)) return false;
+      if (sources.size && !sources.has(r.source)) return false;
+
+      if (fromMs && r.dateMs && r.dateMs < fromMs) return false;
+      if (toMs && r.dateMs && r.dateMs > toMs) return false;
+
+      const klist = (r.keywordsList || []);
+
+      if (kwInc.size) {
+        if (kwMode === "all") {
+          let okAll = true;
+          kwInc.forEach(k => { if (!klist.includes(k)) okAll = false; });
+          if (!okAll) return false;
+        } else {
+          let okAny = false;
+          kwInc.forEach(k => { if (klist.includes(k)) okAny = true; });
+          if (!okAny) return false;
+        }
+      }
+
+      if (kwExc.size) {
+        let bad = false;
+        kwExc.forEach(k => { if (klist.includes(k)) bad = true; });
+        if (bad) return false;
+      }
+
+      if (q) {
+        if (!r.searchText || !r.searchText.includes(q)) return false;
+      }
+      return true;
+    });
+
+    // sort
+    const sv = (R("raw-sort").value || "dateDesc");
+    const cmpStr = (a,b) => String(a||"").localeCompare(String(b||""));
+    if (sv === "dateDesc") filtered.sort((a,b)=> (b.dateMs||0) - (a.dateMs||0));
+    if (sv === "dateAsc")  filtered.sort((a,b)=> (a.dateMs||0) - (b.dateMs||0));
+    if (sv === "sourceAsc")filtered.sort((a,b)=> cmpStr(a.source,b.source));
+    if (sv === "themeAsc") filtered.sort((a,b)=> cmpStr(a.theme,b.theme));
+    if (sv === "poiAsc")   filtered.sort((a,b)=> cmpStr(a.poi,b.poi));
+    if (sv === "titleAsc") filtered.sort((a,b)=> cmpStr(a.title,b.title));
+
+    rawState.filtered = filtered;
+
+    raw_updateSummary();
+    raw_renderPage();
+  }
+
+  function raw_updateSummary(){
+    const parts = [];
+    if (rawState.selTheme.size)  parts.push(`Theme: ${rawState.selTheme.size}`);
+    if (rawState.selPoi.size)    parts.push(`POI: ${rawState.selPoi.size}`);
+    if (rawState.selSource.size) parts.push(`Source: ${rawState.selSource.size}`);
+    if (rawState.selKwInc.size)  parts.push(`Include: ${rawState.selKwInc.size} (${(R("raw-kwMode").value||"any").toUpperCase()})`);
+    if (rawState.selKwExc.size)  parts.push(`Exclude: ${rawState.selKwExc.size}`);
+    if ((R("raw-dateFrom").value||"") || (R("raw-dateTo").value||"")) parts.push("Date range");
+    if ((R("raw-q").value||"").trim()) parts.push("Search");
+
+    R("raw-summary").querySelector("span").innerHTML =
+      parts.length ? `Active filters: <b>${raw_escape(parts.join(" • "))}</b>` : `Active filters: <b>none</b>`;
+
+    R("raw-resultPill").textContent = `Results: ${rawState.filtered.length}`;
+  }
+
+  function raw_renderPage(){
+    const total = rawState.filtered.length;
+    const pageSize = rawState.pageSize;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    rawState.page = Math.min(rawState.page, maxPage);
+
+    const start = (rawState.page - 1) * pageSize;
+    const slice = rawState.filtered.slice(start, start + pageSize);
+
+    R("raw-pageInfo").textContent = `Page ${rawState.page} / ${maxPage}`;
+    R("raw-prev").disabled = (rawState.page <= 1);
+    R("raw-next").disabled = (rawState.page >= maxPage);
+
+    const sheet = rawState.boot?.sheet || "Raw Articles";
+    const grandTotal = rawState.boot?.meta?.total || rawState.allRows.length;
+
+    R("raw-meta").textContent = `Sheet: ${sheet} • Total: ${grandTotal} • Filtered: ${total} • Rows/page: ${pageSize}`;
+    R("raw-showing").textContent = `Showing: ${slice.length}`;
+    R("raw-lastRefresh").textContent = "Table @ " + new Date().toLocaleTimeString();
+
+    const empty = R("raw-empty");
+    empty.style.display = total ? "none" : "block";
+
+    R("raw-tbody").innerHTML = slice.map(r => {
+      const title = raw_escape(r.title || "");
+      const link = (r.link || "").trim();
+      const titleHtml = link
+        ? `<a href="${raw_escape(link)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+        : title;
+
+      const kws = (r.keywordsList || []).slice(0, 14)
+        .map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
+
+      const srcRaw = String(r.source || "");
+      const thmRaw = String(r.theme || "");
+      const poiRaw = String(r.poi || "");
+
+      return `
+        <tr>
+          <td>${titleHtml}</td>
+          <td>${raw_escape(r.dateDisplay || "")}</td>
+          <td><span class="clickable" data-kind="source" data-v="${raw_attr(srcRaw)}">${raw_escape(srcRaw)}</span></td>
+          <td><span class="clickable" data-kind="theme" data-v="${raw_attr(thmRaw)}">${raw_escape(thmRaw)}</span></td>
+          <td><span class="clickable" data-kind="poi" data-v="${raw_attr(poiRaw)}">${raw_escape(poiRaw)}</span></td>
+          <td>${kws}</td>
+        </tr>
+      `;
+    }).join("");
+
+    // refine row height for Fit screen mode (after we have rows)
+    const firstRow = R("raw-tbody").querySelector("tr");
+    if (firstRow && firstRow.offsetHeight) rawState.rowH = firstRow.offsetHeight;
+
+    raw_noticeClear();
+  }
+
+  function raw_clear(){
+    R("raw-q").value = "";
+    R("raw-dateFrom").value = "";
+    R("raw-dateTo").value = "";
+    R("raw-sort").value = "dateDesc";
+    R("raw-kwMode").value = "any";
+
+    rawState.selTheme.clear();
+    rawState.selPoi.clear();
+    rawState.selSource.clear();
+    rawState.selKwInc.clear();
+    rawState.selKwExc.clear();
+
+    raw_renderAllChips();
+    raw_apply(true);
+  }
+
+  function raw_prev(){ if (rawState.page > 1) { rawState.page--; raw_renderPage(); } }
+  function raw_next(){
+    const maxPage = Math.max(1, Math.ceil(rawState.filtered.length / rawState.pageSize));
+    if (rawState.page < maxPage) { rawState.page++; raw_renderPage(); }
+  }
+
+  function raw_quickToday(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    const iso = `${y}-${m}-${day}`;
+    R("raw-dateFrom").value = iso;
+    R("raw-dateTo").value = iso;
+    raw_apply(true);
+  }
+
+  // quick-filter by clicking cells
+  R("raw-tbody").addEventListener("click", (e) => {
+    const t = e.target;
+    if (!t || !t.dataset) return;
+    const kind = t.dataset.kind;
+    const v = raw_unattr(t.dataset.v || "");
+    if (!v) return;
+
+    if (kind === "theme") raw_addToSet(rawState.selTheme, v);
+    if (kind === "poi") raw_addToSet(rawState.selPoi, v);
+    if (kind === "source") raw_addToSet(rawState.selSource, v);
+
+    raw_renderAllChips();
+    raw_apply(true);
+  });
+
+  // Search debounce (fast)
+  R("raw-q").addEventListener("input", () => {
+    clearTimeout(window.__rawQTimer);
+    window.__rawQTimer = setTimeout(() => raw_apply(true), 180);
+  });
+
+  // Changes trigger apply
+  ["raw-pageSize","raw-sort","raw-dateFrom","raw-dateTo","raw-kwMode"].forEach(id => {
+    R(id).addEventListener("change", () => raw_apply(true));
+  });
+
+  // Fit screen: refresh on resize (debounced)
+  window.addEventListener("resize", () => {
+    clearTimeout(window.__rawResizeT);
+    window.__rawResizeT = setTimeout(() => {
+      if ((R("raw-pageSize").value || "") === "fit") raw_apply(true);
+    }, 200);
+  });
+
+  // Enter key = quick apply + also add chips when focused on facet inputs
+  document.addEventListener("keydown", (e) => {
+    const el = document.activeElement;
+    if (e.key !== "Enter") return;
+
+    if (el === R("raw-q")) { raw_apply(true); return; }
+    if (el === R("raw-themeAdd")) { raw_addFacet("theme"); return; }
+    if (el === R("raw-poiAdd")) { raw_addFacet("poi"); return; }
+    if (el === R("raw-sourceAdd")) { raw_addFacet("source"); return; }
+    if (el === R("raw-kwIncAdd")) { raw_addFacet("kwInc"); return; }
+    if (el === R("raw-kwExcAdd")) { raw_addFacet("kwExc"); return; }
+  });
+
+  function raw_importRss() {
+    const range = (R("raw-importRange").value || "7").trim();
+    raw_setBusyUI(true);
+
+    const startTs = Date.now();
+    raw_notice("busy", "⏳ Ingesting RSS…\n(We will update when server responds.)");
+
+    clearInterval(rawState.ingestTicker);
+    rawState.ingestTicker = setInterval(() => {
+      const secs = Math.round((Date.now() - startTs)/1000);
+      R("raw-lastRefresh").textContent = `Ingesting… ${secs}s`;
+    }, 1000);
+
+    raw_runRpc(
+      "Ingesting RSS",
+      (gs) => {
+        if (range === "30") gs.ui_importRSS_30days_v2();
+        else if (range === "all") gs.ui_importRSS_all_v2();
+        else gs.ui_importRSS_7days_v2();
+      },
+      (res) => {
+        clearInterval(rawState.ingestTicker);
+        rawState.ingestTicker = null;
+        raw_setBusyUI(false);
+
+        if (!res || res.ok !== true) {
+          raw_notice("err", "❌ Ingest failed.\n\nFULL RESPONSE:\n" + JSON.stringify(res, null, 2));
+          R("raw-lastRefresh").textContent = "Failed";
+          return;
+        }
+
+        const s = res.stats || {};
+        const secs = Math.max(1, Math.round((Date.now() - startTs) / 1000));
+
+        let msg =
+          `✅ Ingest complete (${secs}s)\n` +
+          `${res.message}\n\n` +
+          `Imported: ${s.imported || 0}\n` +
+          `Duplicates skipped: ${s.skippedDuplicate || 0}\n` +
+          `Old/invalid date skipped: ${s.skippedDate || 0}\n` +
+          `No-match skipped: ${s.skippedNoMatch || 0}\n` +
+          `Missing fields skipped: ${s.skippedMissingFields || 0}\n` +
+          `Feed errors: ${s.feedErrors || 0}`;
+
+        if (Array.isArray(res.errors) && res.errors.length) {
+          msg += `\n\nErrors (first ${Math.min(10, res.errors.length)}):\n- ` +
+                res.errors.slice(0, 10).join("\n- ");
+        }
+
+        raw_notice("ok", msg);
+        R("raw-lastRefresh").textContent = "Ingested @ " + new Date().toLocaleTimeString();
+
+        raw_bootstrap();
+      },
+      (err) => {
+        clearInterval(rawState.ingestTicker);
+        rawState.ingestTicker = null;
+        raw_setBusyUI(false);
+
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Ingest RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "Failed";
+      },
+      { warnAfterMs: 35000, hardTimeoutMs: 6 * 60 * 1000 }
+    );
+  }
+</script>
