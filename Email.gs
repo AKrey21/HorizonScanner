@@ -382,18 +382,6 @@ function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
 }
 
 function buildPreviewBannerDataUrl_() {
-  try {
-    const bannerFile = getFsBannerBlob_();
-    if (bannerFile) {
-      const blob = bannerFile.getBlob();
-      const bytes = blob.getBytes();
-      const b64 = Utilities.base64Encode(bytes);
-      return `data:${blob.getContentType()};base64,${b64}`;
-    }
-  } catch (e) {
-    Logger.log("[PREVIEW] Banner load failed: " + formatErr_(e));
-  }
-
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="966" height="278">` +
     `<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#002A7B"/>` +
@@ -414,20 +402,6 @@ function buildPreviewImageDataUrl_(label) {
     `font-family="Aptos,Segoe UI,Arial" font-size="12" fill="#4a4a4a">` +
     `${safeLabel}</text></svg>`;
   return "data:image/svg+xml;base64," + Utilities.base64Encode(svg);
-}
-
-function getFsBannerBlob_() {
-  if (FS_BANNER_FOLDER_ID && FS_BANNER_FOLDER_ID !== "PASTE_BANNER_FOLDER_ID_HERE") {
-    const folder = DriveApp.getFolderById(FS_BANNER_FOLDER_ID);
-    const files = folder.getFiles();
-    if (files.hasNext()) return files.next();
-  }
-
-  if (FS_BANNER_FILE_ID && FS_BANNER_FILE_ID !== "PASTE_BANNER_FILE_ID_HERE") {
-    return DriveApp.getFileById(FS_BANNER_FILE_ID);
-  }
-
-  return null;
 }
 
 /**
