@@ -91,7 +91,7 @@ function pdf_makeArticlePdf_(url, opts) {
     try {
       const replicaHtml = pdf_renderReplicaHtml_(fetched.html, baseUrl, meta, opts);
       const pdfBlob1 = pdf_htmlToPdfBlob_(replicaHtml, pdfName);
-      return pdf_maybeSave_(pdfBlob1, pdfName, title);
+      return pdf_maybeSave_(pdfBlob1, pdfName, title, meta.siteName || "");
     } catch (e1) {
       // continue fallback ladder
     }
@@ -107,7 +107,7 @@ function pdf_makeArticlePdf_(url, opts) {
       });
       const replicaLiteHtml = pdf_renderReplicaHtml_(fetched.html, baseUrl, meta, lite);
       const pdfBlob2 = pdf_htmlToPdfBlob_(replicaLiteHtml, pdfName);
-      return pdf_maybeSave_(pdfBlob2, pdfName, title);
+      return pdf_maybeSave_(pdfBlob2, pdfName, title, meta.siteName || "");
     } catch (e2) {
       // proceed to reader fallback
     }
@@ -116,10 +116,10 @@ function pdf_makeArticlePdf_(url, opts) {
   // 3) Reader mode fallback (most reliable)
   const readerHtml = pdf_renderReaderHtml_(fetched.html, baseUrl, meta, Object.assign({}, opts, { mode: "reader" }));
   const pdfBlob3 = pdf_htmlToPdfBlob_(readerHtml, pdfName);
-  return pdf_maybeSave_(pdfBlob3, pdfName, title);
+  return pdf_maybeSave_(pdfBlob3, pdfName, title, meta.siteName || "");
 }
 
-function pdf_maybeSave_(pdfBlob, pdfName, title) {
+function pdf_maybeSave_(pdfBlob, pdfName, title, siteName) {
   let fileId = null, fileUrl = null;
   if (PDF_FOLDER_ID && PDF_FOLDER_ID !== "PASTE_PDF_FOLDER_ID_HERE") {
     const folder = DriveApp.getFolderById(PDF_FOLDER_ID);
@@ -127,7 +127,7 @@ function pdf_maybeSave_(pdfBlob, pdfName, title) {
     fileId = file.getId();
     fileUrl = file.getUrl();
   }
-  return { pdfBlob, pdfName, title, fileId, fileUrl };
+  return { pdfBlob, pdfName, title, siteName, fileId, fileUrl };
 }
 
 /* =========================
