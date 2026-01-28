@@ -699,14 +699,6 @@ function rss_normalizeHeader_(value) {
 }
 
 function rss_buildFeedColumnMap_(header) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function rss_getFeedColumnMap_(sh, startRow) {
-  const headerRow = rss_getFeedsHeaderRow_(startRow);
-  const lastCol = Math.max(5, sh.getLastColumn());
-  const header = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] || [];
-
   const map = {};
   const labels = {
     source: ["source", "source name"],
@@ -752,8 +744,6 @@ function rss_getFeedColumnMap_(sh, startRow) {
   }
 
   if (!best.matches) {
-  const foundAny = Object.values(map).some(Boolean);
-  if (!foundAny) {
     return {
       source: 1,
       url: 2,
@@ -768,11 +758,6 @@ function rss_getFeedColumnMap_(sh, startRow) {
   }
 
   return best.map;
-  if (!map.active && header.length >= 5) {
-    map.active = 5;
-  }
-
-  return map;
 }
 
 function rss_getFeedMaxCol_(map) {
