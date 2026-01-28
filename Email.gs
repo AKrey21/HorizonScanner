@@ -275,7 +275,10 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
           });
 
           if (pdfRes && pdfRes.pdfBlob) {
-            pdfName = pdfRes.pdfName || `Article ${topicNo}.pdf`;
+            const sourceName = pdfRes.siteName || email_sourceNameFromUrl_(t.articleUrl);
+            const baseName = `Article ${topicNo} - ${t.title || "Untitled"}` +
+              (sourceName ? ` - ${sourceName}` : "");
+            pdfName = `${safeFilename_(baseName)}.pdf`;
             attachments.push({
               filename: pdfName,
               blob: pdfRes.pdfBlob
@@ -296,7 +299,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
       );
     }
 
-    const attachmentLabel = hasPdf ? (pdfName || `Article ${topicNo} - ${t.title}.pdf`) : "";
+    const attachmentLabel = hasPdf ? (pdfName || `Article ${topicNo} - ${t.title || "Untitled"}.pdf`) : "";
 
     tplTopics.push({
       topicNo,
@@ -540,6 +543,37 @@ function formatErr_(e) {
     return String(msg).slice(0, 500);
   } catch (_) {
     return "Unknown error";
+  }
+}
+
+function email_sourceNameFromUrl_(url) {
+  if (!url) return "";
+  try {
+    const host = new URL(url).hostname || "";
+    const clean = host.replace(/^www\./i, "");
+    if (!clean) return "";
+
+    const parts = clean.split(".").filter(Boolean);
+    if (!parts.length) return "";
+
+    const tld = parts[parts.length - 1];
+    const sld = parts[parts.length - 2];
+    const knownSecondLevel = ["co", "com", "org", "net", "gov", "edu"];
+    const base =
+      (tld && tld.length === 2 && knownSecondLevel.includes(sld) && parts.length >= 3)
+        ? parts[parts.length - 3]
+        : (sld || parts[0]);
+
+    if (!base) return clean;
+
+    return base
+      .replace(/[-_]+/g, " ")
+      .split(" ")
+      .map(w => w ? w[0].toUpperCase() + w.slice(1) : "")
+      .join(" ")
+      .trim();
+  } catch (e) {
+    return "";
   }
 }
 
