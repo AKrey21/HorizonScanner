@@ -16,6 +16,10 @@ var ING_CFG = (function () {
   // If your project defines INGEST_ALL_ARTICLES elsewhere, reuse it.
   var ingestAll = (typeof INGEST_ALL_ARTICLES !== "undefined") ? INGEST_ALL_ARTICLES : false;
 
+  var fetchTimeoutMs = (typeof INGEST_FETCH_TIMEOUT_MS !== "undefined") ? INGEST_FETCH_TIMEOUT_MS : 15000;
+  var maxRuntimeMs = (typeof INGEST_MAX_RUNTIME_MS !== "undefined") ? INGEST_MAX_RUNTIME_MS : 330000;
+  var fetchBatchSize = (typeof INGEST_FETCH_BATCH_SIZE !== "undefined") ? INGEST_FETCH_BATCH_SIZE : 15;
+
   // If your UI.gs defines SPREADSHEET_ID, reuse it.
   var spreadsheetId = (typeof SPREADSHEET_ID !== "undefined") ? SPREADSHEET_ID : "";
 
@@ -25,6 +29,9 @@ var ING_CFG = (function () {
     RAW_SHEET: rawSheet,
     THEME_RULES_START_ROW: rulesStartRow,
     INGEST_ALL_ARTICLES: ingestAll,
+    INGEST_FETCH_TIMEOUT_MS: fetchTimeoutMs,
+    INGEST_MAX_RUNTIME_MS: maxRuntimeMs,
+    INGEST_FETCH_BATCH_SIZE: fetchBatchSize,
     SPREADSHEET_ID: spreadsheetId
   };
 })();
@@ -76,7 +83,9 @@ function ingest_importRSS_(daysBack) {
     skippedDuplicate: 0,
     skippedDate: 0,
     skippedNoMatch: 0,
-    skippedMissingFields: 0
+    skippedMissingFields: 0,
+    stoppedEarly: false,
+    runtimeMs: 0
   };
 
   var errors = [];
@@ -96,7 +105,10 @@ function ingest_importRSS_(daysBack) {
       themeRulesActive: Array.isArray(themeRules) ? themeRules.length : -1,
       feedsActive: Array.isArray(feeds) ? feeds.length : -1,
       firstFeed: feeds && feeds[0] ? (feeds[0].url || "") : "",
-      ingestAll: ingest_shouldIngestAll_()
+      ingestAll: ingest_shouldIngestAll_(),
+      fetchTimeoutMs: ING_CFG.INGEST_FETCH_TIMEOUT_MS,
+      maxRuntimeMs: ING_CFG.INGEST_MAX_RUNTIME_MS,
+      fetchBatchSize: ING_CFG.INGEST_FETCH_BATCH_SIZE
     };
 
     if (!feeds.length) {
@@ -115,149 +127,195 @@ function ingest_importRSS_(daysBack) {
 
     var seenLinks = new Set();
 
-    feeds.forEach(function (feedObj) {
-      stats.feedsProcessed++;
+    var allRowsToWrite = [];
+    var maxRuntimeMs = ING_CFG.INGEST_MAX_RUNTIME_MS;
+    var batchSize = Math.max(1, ING_CFG.INGEST_FETCH_BATCH_SIZE || 1);
 
-      var fixedUrl = ingest_fixGoogleNewsRssUrl_(feedObj.url);
+    for (var start = 0; start < feeds.length; start += batchSize) {
+      if (maxRuntimeMs && (Date.now() - t0) > maxRuntimeMs) {
+        stats.stoppedEarly = true;
+        break;
+      }
 
+      var batch = feeds.slice(start, start + batchSize).map(function (feedObj) {
+        return {
+          feedObj: feedObj,
+          fixedUrl: ingest_fixGoogleNewsRssUrl_(feedObj.url)
+        };
+      });
+
+      var fetchOptions = {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        timeout: ING_CFG.INGEST_FETCH_TIMEOUT_MS,
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.7"
+        }
+      };
+
+      var requests = batch.map(function (item) {
+        var req = {};
+        Object.keys(fetchOptions).forEach(function (k) {
+          req[k] = fetchOptions[k];
+        });
+        req.url = item.fixedUrl;
+        return req;
+      });
+
+      var responses;
       try {
-        var response = UrlFetchApp.fetch(fixedUrl, {
-          muteHttpExceptions: true,
-          followRedirects: true,
-          timeout: 25000,
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.7"
+        responses = UrlFetchApp.fetchAll(requests);
+      } catch (batchErr) {
+        responses = batch.map(function (item) {
+          try {
+            return UrlFetchApp.fetch(item.fixedUrl, fetchOptions);
+          } catch (singleErr) {
+            return { __error: singleErr };
           }
         });
+      }
 
-        var status = response.getResponseCode();
-        if (status < 200 || status >= 300) {
+      responses.forEach(function (response, idx) {
+        var batchItem = batch[idx];
+        var feedObj = batchItem.feedObj;
+        var fixedUrl = batchItem.fixedUrl;
+        stats.feedsProcessed++;
+
+        if (response && response.__error) {
           stats.feedErrors++;
-          errors.push("Feed HTTP " + status + ": " + fixedUrl);
+          errors.push("Feed error: " + fixedUrl + " → " + (response.__error.message || String(response.__error)));
           return;
         }
 
-        var xml = String(response.getContentText() || "").trim();
-        if (!xml) {
-          stats.feedErrors++;
-          errors.push("Feed empty body: " + fixedUrl);
-          return;
-        }
-
-        var safeXml = xml.replace(/^\uFEFF/, "");
-        var doc;
         try {
-          doc = XmlService.parse(safeXml);
-        } catch (parseErr) {
-          stats.feedErrors++;
-          errors.push("XML parse failed: " + fixedUrl);
-          return;
-        }
-
-        var root = doc.getRootElement();
-        var entries = ingest_getFeedEntries_(root);
-        if (!entries.length) return;
-
-        var rowsToWrite = [];
-
-        entries.forEach(function (entry) {
-          stats.entriesSeen++;
-
-          var title = ingest_getChildTextAny_(entry, ["title"]);
-          var rawLink = ingest_getEntryLink_(entry);
-          var linkKey = ingest_normalizeLink_(rawLink);
-
-          var pubDateText = ingest_getChildTextAny_(entry, [
-            "pubDate",
-            "published",
-            "updated",
-            "date",
-            "created",
-            "issued",
-            "modified"
-          ]);
-          var desc = ingest_getChildTextAny_(entry, [
-            "description",
-            "summary",
-            "content",
-            "encoded"
-          ]) || "";
-
-          if (!title || !linkKey) {
-            stats.skippedMissingFields++;
+          var status = response.getResponseCode();
+          if (status < 200 || status >= 300) {
+            stats.feedErrors++;
+            errors.push("Feed HTTP " + status + ": " + fixedUrl);
             return;
           }
 
-          if (seenLinks.has(linkKey)) {
-            stats.skippedDuplicate++;
+          var xml = String(response.getContentText() || "").trim();
+          if (!xml) {
+            stats.feedErrors++;
+            errors.push("Feed empty body: " + fixedUrl);
             return;
           }
-          seenLinks.add(linkKey);
 
-          var pubDate = null;
-          if (pubDateText) pubDate = new Date(pubDateText);
+          var safeXml = xml.replace(/^\uFEFF/, "");
+          var doc;
+          try {
+            doc = XmlService.parse(safeXml);
+          } catch (parseErr) {
+            stats.feedErrors++;
+            errors.push("XML parse failed: " + fixedUrl);
+            return;
+          }
 
-          if (cutoff) {
-            if (pubDate && !isNaN(pubDate.getTime())) {
-              if (pubDate < cutoff) {
-                stats.skippedDate++;
+          var root = doc.getRootElement();
+          var entries = ingest_getFeedEntries_(root);
+          if (!entries.length) return;
+
+          entries.forEach(function (entry) {
+            stats.entriesSeen++;
+
+            var title = ingest_getChildTextAny_(entry, ["title"]);
+            var rawLink = ingest_getEntryLink_(entry);
+            var linkKey = ingest_normalizeLink_(rawLink);
+
+            var pubDateText = ingest_getChildTextAny_(entry, [
+              "pubDate",
+              "published",
+              "updated",
+              "date",
+              "created",
+              "issued",
+              "modified"
+            ]);
+            var desc = ingest_getChildTextAny_(entry, [
+              "description",
+              "summary",
+              "content",
+              "encoded"
+            ]) || "";
+
+            if (!title || !linkKey) {
+              stats.skippedMissingFields++;
+              return;
+            }
+
+            if (seenLinks.has(linkKey)) {
+              stats.skippedDuplicate++;
+              return;
+            }
+            seenLinks.add(linkKey);
+
+            var pubDate = null;
+            if (pubDateText) pubDate = new Date(pubDateText);
+
+            if (cutoff) {
+              if (pubDate && !isNaN(pubDate.getTime())) {
+                if (pubDate < cutoff) {
+                  stats.skippedDate++;
+                  return;
+                }
+              }
+            }
+
+            var source =
+              ingest_detectSourceFromEntry_(entry) ||
+              feedObj.sourceName ||
+              "Unknown";
+
+            var blob = (title + " " + desc).toLowerCase();
+
+            var theme = "";
+            var poi = "";
+            var matchedKeywords = [];
+
+            if (!ingest_shouldIngestAll_()) {
+              var detected = ingest_detectFromRules_(blob, themeRules);
+              theme = detected[0];
+              poi = detected[1];
+              matchedKeywords = detected[2];
+
+              if (!theme) {
+                stats.skippedNoMatch++;
                 return;
               }
             }
-          }
 
-          var source =
-            ingest_detectSourceFromEntry_(entry) ||
-            feedObj.sourceName ||
-            "Unknown";
+            allRowsToWrite.push([
+              title,
+              rawLink,
+              pubDateText,
+              source,
+              theme,
+              poi,
+              matchedKeywords.join(", ")
+            ]);
 
-          var blob = (title + " " + desc).toLowerCase();
-
-          var theme = "";
-          var poi = "";
-          var matchedKeywords = [];
-
-          if (!ingest_shouldIngestAll_()) {
-            var detected = ingest_detectFromRules_(blob, themeRules);
-            theme = detected[0];
-            poi = detected[1];
-            matchedKeywords = detected[2];
-
-            if (!theme) {
-              stats.skippedNoMatch++;
-              return;
-            }
-          }
-
-          rowsToWrite.push([
-            title,
-            rawLink,
-            pubDateText,
-            source,
-            theme,
-            poi,
-            matchedKeywords.join(", ")
-          ]);
-
-          stats.imported++;
-        });
-
-        if (rowsToWrite.length) {
-          repo_appendRawArticles_(rowsToWrite);
+            stats.imported++;
+          });
+        } catch (e) {
+          stats.feedErrors++;
+          errors.push("Feed error: " + fixedUrl + " → " + (e && e.message ? e.message : String(e)));
         }
+      });
+    }
 
-      } catch (e) {
-        stats.feedErrors++;
-        errors.push("Feed error: " + fixedUrl + " → " + (e && e.message ? e.message : String(e)));
-      }
-    });
+    if (allRowsToWrite.length) {
+      repo_appendRawArticles_(allRowsToWrite);
+    }
 
     var ms = Date.now() - t0;
+    stats.runtimeMs = ms;
     return {
       ok: true,
       message: "RSS import complete: imported " + stats.imported + " articles from " +
-        stats.feedsProcessed + "/" + stats.feedsActive + " active feeds in " + ms + "ms.",
+        stats.feedsProcessed + "/" + stats.feedsActive + " active feeds in " + ms + "ms." +
+        (stats.stoppedEarly ? " (Stopped early to avoid execution time limit.)" : ""),
       stats: stats,
       errors: errors.slice(0, 50),
       debug: debug
