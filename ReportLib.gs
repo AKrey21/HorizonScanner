@@ -6,7 +6,7 @@
  * - Resolve Google News wrapper → publisher URL
  * - Fetch article meta (via your existing fetchArticleMeta_)
  * - Gemini summarisation (via your existing geminiGenerateJson_)
- * - Optional PDF hook (makeArticlePdf_) kept but gated by caller
+ * - Optional PDF hook (pdf_makeArticlePdf_) kept but gated by caller
  * - Preview block rendering helpers
  ******************************/
 
@@ -38,13 +38,11 @@ function rpt_buildTopicsFromLinks_(linksText, opts) {
     // AI
     const ai = generateAiBits_(a);
 
-    // optional PDF
+    // optional PDF (offline article replica)
     let pdfUrl = "";
-    if (includePdf && typeof makeArticlePdf_ === "function") {
+    if (includePdf && typeof pdf_makeArticlePdf_ === "function") {
       try {
-        const imageBlob = tryFetchImageBlob_(a.ogImage);
-        const pdfFile = makeArticlePdf_(idx, a, ai, imageBlob);
-        pdfUrl = pdfFile ? pdfFile.getUrl() : "";
+        pdfUrl = rpt_makeArticlePdfFromUrl_(finalUrl) || "";
       } catch (e) {
         pdfUrl = "";
       }
@@ -113,6 +111,37 @@ function rpt_fetchArticleMetaSafe_(finalUrl, inputUrl) {
   a.ogImage = (a.ogImage || "").trim();
 
   return a;
+}
+
+/* =========================================================================
+ * Optional: PDF helper (offline article replica)
+ * ========================================================================= */
+
+function rpt_makeArticlePdfFromUrl_(articleUrl) {
+  if (!articleUrl) return "";
+  if (typeof pdf_makeArticlePdf_ !== "function") return "";
+
+  const opts = (typeof pdf_defaultEmailOpts_ === "function")
+    ? pdf_defaultEmailOpts_()
+    : {};
+
+  const res = pdf_makeArticlePdf_(articleUrl, opts);
+  if (!res) return "";
+  if (res.fileUrl) return res.fileUrl;
+  if (!res.pdfBlob) return "";
+
+  const pdfName = res.pdfName || "Article.pdf";
+  let file;
+
+  if (typeof PDF_FOLDER_ID !== "undefined" &&
+      PDF_FOLDER_ID &&
+      PDF_FOLDER_ID !== "PASTE_PDF_FOLDER_ID_HERE") {
+    file = DriveApp.getFolderById(PDF_FOLDER_ID).createFile(res.pdfBlob.setName(pdfName));
+  } else {
+    file = DriveApp.createFile(res.pdfBlob.setName(pdfName));
+  }
+
+  return file.getUrl();
 }
 
 /* =========================================================================
@@ -540,7 +569,7 @@ function renderTopicBlock_(topicNo, title, relevance20, summaryHtml, imgUrl, pdf
     : `<div style="width:220px; height:130px; border-radius:8px; border:1px dashed #ccc; display:flex; align-items:center; justify-content:center; color:#777;">No image</div>`;
 
   const pdfLine = pdfUrl
-    ? `<a style="${linkStyle}" href="${escapeHtml_(pdfUrl)}" target="_blank" rel="noopener">Article ${topicNo} – xxx.pdf</a>`
+    ? `<a style="${linkStyle}" href="${escapeHtml_(pdfUrl)}" target="_blank" rel="noopener">Article ${topicNo} – Offline PDF</a>`
     : `<span style="color:#a7afc0; font-size:12px;">PDF generation on hold (fast mode)</span>`;
 
   return `
