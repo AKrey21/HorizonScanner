@@ -1,129 +1,124 @@
 <!-- EmailTemplateBody.html -->
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <!-- Force consistent typography in Outlook/Word -->
-    <style type="text/css">
-      /* Base */
-      body, table, td, div, p, span, li, a {
-        font-family: "Aptos","Aptos Display","Segoe UI",Arial,sans-serif !important;
-        font-size: 11pt !important;
-        color: #000;
-      }
+<html xmlns:v="urn:schemas-microsoft-com:vml"
+      xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns:m="http://schemas.microsoft.com/office/2004/12/omml"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="Microsoft Word 15">
+  <meta name="Originator" content="Microsoft Word 15">
+  <style>
+    body, table, td, div, p, span, li, a {
+      font-family: "Aptos","Aptos Display","Segoe UI",Arial,sans-serif;
+      font-size: 11pt;
+      color: #000;
+    }
+    a { color: #467886; text-decoration: underline; }
+    .fs-section { font-size: 12pt; font-weight: 700; color: #fff; }
+    .fs-meta-row {
+      margin-left:165.0pt;
+      text-indent:-165.0pt;
+      tab-stops:165.0pt;
+      mso-layout-grid-align:none;
+      text-autospace:none;
+    }
+  </style>
+</head>
 
-      /* Section header bars (Labour Market / Gig Workers / etc.) */
-      .fs-section {
-        font-size: 12pt !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
-      }
+<body lang="EN-SG" link="#467886" vlink="#96607D" style="tab-interval:36.0pt;word-wrap:break-word">
+  <div class="WordSection1">
+    <p class="MsoNormal fs-meta-row"><b>From:<span style="mso-tab-count:1">                                                       </span></b>FutureScans@MOM Team</p>
+    <p class="MsoNormal fs-meta-row"><b>Sent:<span style="mso-tab-count:1">                                                         </span></b>Wednesday, 28 January 2026 3:32 pm</p>
+    <p class="MsoNormal fs-meta-row"><b>To:<span style="mso-tab-count:1">                                                            </span></b>FutureScans@MOM Team</p>
+    <p class="MsoNormal fs-meta-row"><b>Subject:<span style="mso-tab-count:1">                                                   </span></b>FutureScans@MOM: Week of <?= weekOf ?></p>
 
-      /* Links */
-      a { color: #1a73e8; text-decoration: underline; }
+    <p class="MsoNormal">&nbsp;</p>
 
-      /* Tighter paragraphs to avoid Outlook adding extra gaps */
-      p { margin: 0 0 10px 0; }
-    </style>
-  </head>
-
-  <body style="margin:0;padding:0;">
     <div align="center">
-      <table border="0" cellspacing="0" cellpadding="0" width="966" style="border-collapse:collapse;">
-
-        <!-- ✅ Banner is always present as CID "fs_banner" (attached from Email.gs) -->
+      <table class="MsoNormalTable" border="0" cellspacing="0" cellpadding="0" width="966"
+             style="width:724.8pt;border-collapse:collapse;">
         <tr>
-          <td colspan="4" style="padding:0;">
-            <img src="cid:fs_banner" width="966"
-                 style="display:block;border:0;width:966px;max-width:100%;"
-                 alt="FutureScans@MOM">
+          <td width="966" colspan="4" valign="top" style="padding:0;">
+            <p class="MsoNormal" align="center" style="text-align:center;">
+              <img width="966" height="278"
+                   src="<?= bannerSrc ?>"
+                   style="height:2.895in;width:10.062in;display:block;border:0;"
+                   alt="FutureScans@MOM">
+            </p>
           </td>
         </tr>
-
         <tr>
           <td width="114"></td>
-          <td colspan="3" width="852"
-              style="padding:6px 0;text-align:right;">
-            <b><i>Week of <?= weekOf ?></i></b>
+          <td width="853" colspan="3" valign="top" style="padding:0;">
+            <p class="MsoNormal" align="right" style="text-align:right;">
+              <b><i><span style="font-size:12.0pt;">Week of <span style="background:yellow;"><?= weekOf ?></span></span></i></b>
+            </p>
           </td>
         </tr>
-
         <tr>
-          <td colspan="4"
-              style="background:#E5EEFB;padding:10px;">
-            <i>
-              FutureScans@MOM is a weekly collection of articles covering topics relevant to MOM's work, curated by SPTD.
-              The summaries are AI-generated and reviewed by the editorial team.
-            </i>
+          <td width="966" colspan="4" valign="top" style="background:#E5EEFB;padding:0;">
+            <p class="MsoNormal"><i>FutureScans@MOM is a weekly collection of articles covering topics relevant to MOM's work, curated by the Strategic Planning and Transformation Department (SPTD). The summaries are AI-generated and reviewed by the editorial team.</i></p>
+            <p class="MsoNormal"><i>&nbsp;</i></p>
           </td>
         </tr>
 
         <? for (var i = 0; i < topics.length; i++) { var t = topics[i]; ?>
-          <!-- Section bar: 12pt -->
           <tr>
-            <td colspan="4"
-                class="fs-section"
-                style="background:<?= t.barColor ?>;padding:6px 10px;">
-              <?= t.sectionTitle ?>
+            <td width="966" colspan="4" valign="top" style="background:<?= t.barColor ?>;padding:0;">
+              <p class="MsoNormal"><span class="fs-section"><?= t.sectionTitle ?></span></p>
             </td>
           </tr>
-
           <tr>
-            <!-- Main text block: 11pt -->
-            <td colspan="2" width="482" valign="top"
-                style="padding:10px 10px;">
-
-              <p style="margin:0 0 8px 0;font-weight:700;">
-                <?= t.title ?>
-              </p>
-
-              <p style="margin:0 0 10px 0;">
-                <?= t.relevance20 ?>
-              </p>
-
-              <!-- summaryHtml contains safe <b> tags -->
-              <p style="margin:0 0 10px 0;line-height:1.45;">
-                <?!= t.summaryHtml ?>
-              </p>
-
-              <p style="margin:0;">
-                Click <a href="<?= t.articleUrl ?>" target="_blank" rel="noopener">here</a> to read more.
+            <td width="482" colspan="2" valign="top" style="width:361.5pt;padding:0;">
+              <p class="MsoNormal"><b><?= t.title ?></b></p>
+              <p class="MsoNormal"><b>&nbsp;</b></p>
+              <p class="MsoListParagraph" style="margin-left:0cm"><?= t.relevance20 ?></p>
+              <p class="MsoNormal"><b>&nbsp;</b></p>
+              <p class="MsoNormal"><?!= t.summaryHtml ?></p>
+              <p class="MsoNormal">&nbsp;</p>
+              <p class="MsoNormal">Click <u><span style="color:#467886"><a href="<?= t.articleUrl ?>" target="_blank" rel="noopener">here</a></span></u> to read more.</p>
+              <p class="MsoNormal">&nbsp;</p>
+            </td>
+            <td width="287" style="width:215.55pt;padding:0;">
+              <p class="MsoNormal" align="center" style="text-align:center;">
+                <? if (t.imgSrc) { ?>
+                  <img src="<?= t.imgSrc ?>" alt="" style="max-width:246px;width:246px;height:auto;display:block;border:0;" />
+                <? } else { ?>
+                  <span>&lt;add picture from article or stock image&gt;</span>
+                <? } ?>
               </p>
             </td>
-
-            <td width="287" valign="top" style="padding:10px 10px;">
-              <? if (t.imgCid) { ?>
-                <img border="0" src="cid:<?= t.imgCid ?>" width="246"
-                     style="display:block;border:0;max-width:246px;height:auto;" alt="">
-              <? } else { ?>
-                <div style="width:246px;height:140px;border:1px dashed #bbb;border-radius:6px;text-align:center;
-                            line-height:140px;color:#666;">
-                  No image
-                </div>
-              <? } ?>
-            </td>
-
-            <td width="197" valign="top"
-                style="padding:10px 10px;text-align:center;">
-              <?= t.attachmentLabel ?>
+            <td width="197" style="width:147.75pt;padding:0;">
+              <p class="MsoNormal" align="center" style="text-align:center;">
+                <?= t.attachmentLabel ?>
+              </p>
             </td>
           </tr>
         <? } ?>
 
         <tr>
-          <td colspan="4"
-              style="border-top:2px double #000;border-bottom:4px double #000;padding:12px;text-align:center;">
-            Have a futures-related article on work that you want the community to know about?<br>
-            Reach out to us at <a href="mailto:MOM_SPTD@mom.gov.sg">MOM_SPTD@mom.gov.sg</a>!
+          <td width="966" colspan="4" valign="top" style="border-top:double #000 1.5pt;border-bottom:double #000 4.5pt;padding:0;">
+            <p class="MsoNormal" align="center" style="text-align:center;"><i>&nbsp;</i></p>
+            <p class="MsoNormal" align="center" style="text-align:center;">Have a futures-related article on work that you want the community to know about?</p>
+            <p class="MsoNormal" align="center" style="text-align:center;">Reach out to us at <i><a href="mailto:MOM_SPTD@mom.gov.sg">MOM_SPTD@mom.gov.sg</a>!</i></p>
+            <p class="MsoNormal" align="center" style="text-align:center;"><i>&nbsp;</i></p>
           </td>
         </tr>
-
+        <tr>
+          <td width="114"></td>
+          <td width="368"></td>
+          <td width="287"></td>
+          <td width="197"></td>
+        </tr>
       </table>
     </div>
 
-    <p style="margin:12px 0 0 0;">
-      Best regards,<br>
-      FutureScans@MOM Team
-    </p>
-  </body>
+    <p class="MsoNormal">&nbsp;</p>
+    <p class="MsoNormal">Best regards,</p>
+    <p class="MsoNormal">FutureScans@MOM Team</p>
+  </div>
+</body>
 </html>
