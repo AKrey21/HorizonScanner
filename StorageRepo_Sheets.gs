@@ -63,7 +63,7 @@ function repo_appendRawArticles_(rows) {
   return rows.length;
 }
 
-// --- RSS FEEDS (A:Source B:URL C:Notes D:Active) ---
+// --- RSS FEEDS (A:Source B:URL C:Tags D:Notes E:Active) ---
 function repo_getActiveFeeds_() {
   const sh = repo_getSheetOrThrow_(repo_getFeedsSheetName_());
   const lastRow = sh.getLastRow();
@@ -83,7 +83,7 @@ function repo_getActiveFeeds_() {
       const active =
         activeRaw === true || activeRaw === 1 || String(activeRaw).trim().toLowerCase() === "true";
 
-      return { url, active, sourceName: source, notes };
+      return { url, active, sourceName: source, tags, notes };
     })
     .filter(x => x.active && x.url);
 }
