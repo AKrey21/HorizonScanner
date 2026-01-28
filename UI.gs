@@ -714,7 +714,6 @@ function rss_getFeedColumnMap_(sh, startRow) {
     tags: ["tags", "tag", "theme", "themes"],
     notes: ["notes", "note"],
     active: ["active", "active", "enabled", "status"]
-    active: ["active", "active?", "enabled", "status"]
   };
 
   header.forEach((cell, idx) => {
