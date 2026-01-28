@@ -1,4 +1,13 @@
 function loadThemeRules() {
+  if (typeof repo_getActiveThemeRules_ === "function") {
+    const rules = repo_getActiveThemeRules_() || [];
+    return rules.map(rule => ({
+      theme: rule.theme,
+      poi: rule.poi,
+      keywords: rule.keywords || []
+    }));
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("ThemeRules");
   if (!sheet) return [];

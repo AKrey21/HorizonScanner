@@ -25,8 +25,6 @@ const FEED_DISCOVERY_SHEET = "Feed Discovery";
 
 // Gemini config
 const GEMINI_MODEL = "gemini-2.5-flash"; // adjust if needed
-const GEMINI_ENDPOINT_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-
 // Behavior
 const MAX_HTML_CHARS_SENT_TO_GEMINI = 12000; // keep prompts bounded
 const VERIFY_FEED_FETCH = true;              // verify candidates are real RSS/Atom
@@ -416,9 +414,6 @@ function buildGoogleNewsSiteRss_(homepage) {
  ***********************/
 
 function geminiSuggestFeeds_(homepage, html, extractedCandidates) {
-  const key = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-  if (!key) throw new Error("Missing GEMINI_API_KEY in Script Properties.");
-
   const snippet = (html || "").slice(0, MAX_HTML_CHARS_SENT_TO_GEMINI);
 
   const prompt =
@@ -440,37 +435,12 @@ Return ONLY valid RSS or Atom feed URLs for this site, as a JSON array of string
   https://news.google.com/rss/search?q=site:DOMAIN&hl=en-SG&gl=SG&ceid=SG:en
 - Do not include explanations. JSON only.`;
 
-  const url = `${GEMINI_ENDPOINT_BASE}${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(key)}`;
-
-  const payload = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 800
-    }
-  };
-
-  const res = UrlFetchApp.fetch(url, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
-
-  const code = res.getResponseCode();
-  const body = res.getContentText() || "";
-  if (code < 200 || code >= 300) {
-    throw new Error(`Gemini API error HTTP ${code}: ${body.slice(0, 300)}`);
-  }
-
-  let json;
-  try {
-    json = JSON.parse(body);
-  } catch (e) {
-    throw new Error(`Gemini response not JSON: ${body.slice(0, 200)}`);
-  }
-
-  const text = extractGeminiText_(json).trim();
+  const text = geminiGenerateText_(prompt, {
+    model: GEMINI_MODEL,
+    temperature: 0.2,
+    maxOutputTokens: 800,
+    responseMimeType: "application/json"
+  }).trim();
   if (!text) return [];
 
   // Expect JSON array of strings
@@ -488,15 +458,4 @@ Return ONLY valid RSS or Atom feed URLs for this site, as a JSON array of string
     .map(s => (s || "").toString().trim())
     .filter(Boolean)
     .slice(0, 20);
-}
-
-function extractGeminiText_(resp) {
-  try {
-    const cands = resp.candidates || [];
-    const parts = (cands[0].content && cands[0].content.parts) || [];
-    const texts = parts.map(p => p.text).filter(Boolean);
-    return texts.join("\n");
-  } catch (e) {
-    return "";
-  }
 }

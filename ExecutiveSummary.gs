@@ -178,27 +178,13 @@ function generateExecutiveSummary() {
 
   const prompt = buildExecutivePrompt_(cfg.persona, cfg.weekly_instructions, articlesForModel);
 
-  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-  if (!apiKey) {
-    SpreadsheetApp.getUi().alert("GEMINI_API_KEY not set in Script Properties.");
-    return;
-  }
-
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
-    encodeURIComponent(apiKey);
-
   let selectionText = "";
   try {
-    const response = UrlFetchApp.fetch(url, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      muteHttpExceptions: true
+    selectionText = geminiGenerateText_(prompt, {
+      model: "gemini-2.5-flash",
+      temperature: 0.2,
+      maxOutputTokens: 800
     });
-
-    const result = JSON.parse(response.getContentText());
-    selectionText = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
   } catch (e) {
     Logger.log("Gemini API failed: " + e);
   }
