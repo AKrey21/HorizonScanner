@@ -654,19 +654,18 @@ function ui_getRawArticles_bootstrap_v1() {
 
 /*********************************
  * UI_RSSFeeds.gs — RSS Feeds UI API (collision-safe)
- * Sheet starts at row RSS_FEEDS_START_ROW, columns A:E by default:
+ * Sheet starts at row RSS_FEEDS_START_ROW, columns A:D by default:
  *   A: Source
  *   B: Feed URL
- *   C: Tags / Theme (optional)
- *   D: Notes (optional)
- *   E: Active (checkbox)
+ *   C: Notes (optional)
+ *   D: Active (checkbox)
  *********************************/
 
 // Fallbacks (won’t error if you haven’t defined constants elsewhere)
 // Renamed to reduce collision risk across files
 const RSS_UI_FEEDS_SHEET_FALLBACK = "RSS Feeds";
 const RSS_UI_FEEDS_START_ROW_FALLBACK = 2;
-const RSS_UI_FEEDS_COLS_FALLBACK = 5;
+const RSS_UI_FEEDS_COLS_FALLBACK = 4;
 
 function rss_getRssFeedsSheetName_() {
   // If you already have a constant elsewhere, we’ll use it.
@@ -741,7 +740,7 @@ function ui_getRssFeeds(params) {
     // Build row objects + filter blanks
     const allRows = values
       .map((r, idx) => {
-        const activeRaw = r[4];
+        const activeRaw = r[3];
         const active =
           activeRaw === true ||
           activeRaw === 1 ||
@@ -751,16 +750,15 @@ function ui_getRssFeeds(params) {
           rowIndex: startRow + idx,
           source: String(r[0] || "").trim(),
           url: String(r[1] || "").trim(),
-          tags: String(r[2] || "").trim(),
-          notes: String(r[3] || "").trim(),
+          notes: String(r[2] || "").trim(),
           active
         };
       })
-      .filter(r => r.source || r.url || r.tags || r.notes);
+      .filter(r => r.source || r.url || r.notes);
 
     // Search filter
     const filtered = allRows.filter(r =>
-      rss_rowMatchesQuery_([r.source, r.url, r.tags, r.notes, r.active], qLower)
+      rss_rowMatchesQuery_([r.source, r.url, r.notes, r.active], qLower)
     );
 
     const totalMatches = filtered.length;
@@ -786,7 +784,7 @@ function ui_getRssFeeds(params) {
 
 /**
  * SAVE edits
- * payload: { edits: [{rowIndex, source, url, tags, notes, active}] }
+ * payload: { edits: [{rowIndex, source, url, notes, active}] }
  */
 function ui_saveRssFeeds(payload) {
   try {
@@ -800,18 +798,16 @@ function ui_saveRssFeeds(payload) {
     if (!sh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
 
     const startRow = rss_getRssFeedsStartRow_();
-
     edits.forEach(e => {
       const rowIndex = Number(e.rowIndex);
       if (!rowIndex || rowIndex < startRow) return;
 
-      sh.getRange(rowIndex, 1, 1, 5).setValues([[
-        String(e.source || "").trim(),
-        String(e.url || "").trim(),
-        String(e.tags || "").trim(),
-        String(e.notes || "").trim(),
-        e.active === true
-      ]]);
+      sh.getRange(rowIndex, 1).setValue(String(e.source || "").trim());
+      sh.getRange(rowIndex, 2).setValue(String(e.url || "").trim());
+      sh.getRange(rowIndex, 3).setValue(String(e.notes || "").trim());
+      const cell = sh.getRange(rowIndex, 4);
+      cell.setValue(e.active === true);
+      cell.insertCheckboxes();
     });
 
     return { ok: true, saved: edits.length };
@@ -836,18 +832,20 @@ function ui_addRssFeed() {
     sh.insertRowAfter(lastRow);
     const newRow = lastRow + 1;
 
-    const template = sh.getRange(startRow, 1, 1, 5);
-    const dest = sh.getRange(newRow, 1, 1, 5);
+    const template = sh.getRange(startRow, 1, 1, rss_getRssFeedsCols_());
+    const dest = sh.getRange(newRow, 1, 1, rss_getRssFeedsCols_());
 
     template.copyTo(dest, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
     template.copyTo(dest, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
 
     dest.clearContent();
-    sh.getRange(newRow, 5).setValue(true);
+    const cell = sh.getRange(newRow, 4);
+    cell.setValue(true);
+    cell.insertCheckboxes();
 
     return {
       ok: true,
-      row: { rowIndex: newRow, source: "", url: "", tags: "", notes: "", active: true }
+      row: { rowIndex: newRow, source: "", url: "", notes: "", active: true }
     };
   } catch (err) {
     return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };

@@ -107,7 +107,6 @@
         <tr>
           <th style="min-width:160px;">Source</th>
           <th style="min-width:320px;">Feed URL</th>
-          <th style="min-width:160px;">Tags</th>
           <th style="min-width:220px;">Notes</th>
           <th style="width:90px;">Active</th>
         </tr>
@@ -195,7 +194,6 @@
                 <input type="url" value="${esc(r.url)}" data-k="url">
                 ${urlPreview}
               </td>
-              <td><input type="text" value="${esc(r.tags)}" data-k="tags"></td>
               <td><input type="text" value="${esc(r.notes)}" data-k="notes"></td>
               <td style="text-align:center;">
                 <input type="checkbox" ${r.active ? "checked" : ""} data-k="active">
@@ -227,7 +225,6 @@
         rowIndex,
         source: get("source")?.value || "",
         url: get("url")?.value || "",
-        tags: get("tags")?.value || "",
         notes: get("notes")?.value || "",
         active: !!get("active")?.checked
       });

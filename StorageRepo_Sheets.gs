@@ -63,26 +63,24 @@ function repo_appendRawArticles_(rows) {
   return rows.length;
 }
 
-// --- RSS FEEDS (A:Source B:URL C:Tags D:Notes E:Active) ---
+// --- RSS FEEDS (A:Source B:URL C:Notes D:Active) ---
 function repo_getActiveFeeds_() {
   const sh = repo_getSheetOrThrow_(repo_getFeedsSheetName_());
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
 
-  // Read A:E
-  const values = sh.getRange(2, 1, lastRow - 1, 5).getValues();
+  const values = sh.getRange(2, 1, lastRow - 1, 4).getValues();
 
   return values
     .map(r => {
       const source = String(r[0] || "").trim();
       const url    = String(r[1] || "").trim();
-      const tags   = String(r[2] || "").trim();
-      const notes  = String(r[3] || "").trim();
-      const activeRaw = r[4];
+      const notes  = String(r[2] || "").trim();
+      const activeRaw = r[3];
       const active =
         activeRaw === true || activeRaw === 1 || String(activeRaw).trim().toLowerCase() === "true";
 
-      return { url, active, sourceName: source, tags, notes };
+      return { url, active, sourceName: source, notes };
     })
     .filter(x => x.active && x.url);
 }
