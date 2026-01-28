@@ -23,6 +23,7 @@ const EML_OUTPUT_FOLDER_ID = "PASTE_EML_OUTPUT_FOLDER_ID_HERE"; // optional
 
 // ===== FutureScans banner (Drive asset) =====
 const FS_BANNER_FILE_ID = "13g5m1yI6V5Fcjvl57aEUZcHYq1lfnk6g"; // Banner.jpg in Drive
+const FS_BANNER_FOLDER_ID = "1yuFMdayHpj9UB2qM14CORFii6LUCVJxp"; // Banner folder in Drive
 
 // Browser-ish UA for image fetch fallback
 const EMAIL_UA =
@@ -209,9 +210,10 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   // ---- Banner (Drive asset → CID) ----
   // Always attach banner, and force JPG mime so Outlook renders it reliably.
   try {
-    const bannerFile = DriveApp.getFileById(FS_BANNER_FILE_ID);
+    const bannerBlobSource = getFsBannerBlob_();
+    if (!bannerBlobSource) throw new Error("No banner file found.");
 
-    let bannerBlob = bannerFile.getBlob();
+    let bannerBlob = bannerBlobSource.getBlob();
     // Force correct metadata (Drive sometimes returns application/octet-stream)
     bannerBlob = bannerBlob
       .setName("fs_banner.jpg")
@@ -310,6 +312,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
       summaryHtml: sanitizeHtmlBasic_(t.summaryHtml || ""),
       articleUrl: t.articleUrl || "#",
       imgCid,
+      imgSrc: imgCid ? `cid:${imgCid}` : "",
       hasPdf,
       attachmentLabel,
       pdfError
@@ -319,6 +322,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   // ---- Render EmailTemplateBody.html as Apps Script Template ----
   const tpl = HtmlService.createTemplateFromFile("EmailTemplateBody");
   tpl.weekOf = weekLabel;
+  tpl.bannerSrc = "cid:fs_banner";
   tpl.topics = tplTopics;
 
   // ✅ Post-process safety net (prevents Calibri + enforces 11/12pt if needed)
@@ -326,6 +330,104 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   htmlBody = enforceFsTypography_(htmlBody);
 
   return { htmlBody, inlineImages, attachments };
+}
+
+/* =========================================================================
+ * Preview HTML builder (browser-safe)
+ * ========================================================================= */
+
+function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
+  const opts = Object.assign(
+    {
+      bannerSrc: buildPreviewBannerDataUrl_(),
+      imagePlaceholderSrc: buildPreviewImageDataUrl_("Article image")
+    },
+    options || {}
+  );
+
+  const sectionLabels = [
+    "Labour Market",
+    "Gig Workers",
+    "Jobs and Skills",
+    "Workplace",
+    "Other Labour Markets"
+  ];
+
+  const tplTopics = (topics || []).map((t, i) => {
+    const topicNo = t.topicNo || (i + 1);
+    const sectionTitle = sectionLabels[i] || `Topic ${topicNo}`;
+    const barColor = (topicNo === 2) ? "#FF7300" : "#002A7B";
+    const attachmentLabel = t.attachmentLabel ||
+      `Article ${topicNo} – ${(t.title || "Untitled").slice(0, 40)}.pdf`;
+
+    return {
+      topicNo,
+      sectionTitle,
+      barColor,
+      title: t.title || "Untitled",
+      relevance20: t.relevance20 || "",
+      summaryHtml: sanitizeHtmlBasic_(t.summaryHtml || ""),
+      articleUrl: t.articleUrl || "#",
+      imgSrc: t.imageUrl || opts.imagePlaceholderSrc,
+      attachmentLabel
+    };
+  });
+
+  const tpl = HtmlService.createTemplateFromFile("EmailTemplateBody");
+  tpl.weekOf = weekLabel;
+  tpl.bannerSrc = opts.bannerSrc;
+  tpl.topics = tplTopics;
+
+  return tpl.evaluate().getContent();
+}
+
+function buildPreviewBannerDataUrl_() {
+  try {
+    const bannerFile = getFsBannerBlob_();
+    if (bannerFile) {
+      const blob = bannerFile.getBlob();
+      const bytes = blob.getBytes();
+      const b64 = Utilities.base64Encode(bytes);
+      return `data:${blob.getContentType()};base64,${b64}`;
+    }
+  } catch (e) {
+    Logger.log("[PREVIEW] Banner load failed: " + formatErr_(e));
+  }
+
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="966" height="278">` +
+    `<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#002A7B"/>` +
+    `<stop offset="1" stop-color="#0D47A1"/></linearGradient></defs>` +
+    `<rect width="966" height="278" fill="url(#g)"/>` +
+    `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" ` +
+    `font-family="Aptos,Segoe UI,Arial" font-size="36" fill="#ffffff">` +
+    `FutureScans@MOM</text></svg>`;
+  return "data:image/svg+xml;base64," + Utilities.base64Encode(svg);
+}
+
+function buildPreviewImageDataUrl_(label) {
+  const safeLabel = String(label || "Image").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="246" height="140">` +
+    `<rect width="246" height="140" fill="#f2f4f8" stroke="#c7c9cc"/>` +
+    `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" ` +
+    `font-family="Aptos,Segoe UI,Arial" font-size="12" fill="#4a4a4a">` +
+    `${safeLabel}</text></svg>`;
+  return "data:image/svg+xml;base64," + Utilities.base64Encode(svg);
+}
+
+function getFsBannerBlob_() {
+  if (FS_BANNER_FOLDER_ID && FS_BANNER_FOLDER_ID !== "PASTE_BANNER_FOLDER_ID_HERE") {
+    const folder = DriveApp.getFolderById(FS_BANNER_FOLDER_ID);
+    const files = folder.getFiles();
+    if (files.hasNext()) return files.next();
+  }
+
+  if (FS_BANNER_FILE_ID && FS_BANNER_FILE_ID !== "PASTE_BANNER_FILE_ID_HERE") {
+    return DriveApp.getFileById(FS_BANNER_FILE_ID);
+  }
+
+  return null;
 }
 
 /**

@@ -4,7 +4,7 @@
   /* ===== Report Generator styles (scoped) ===== */
   .rep_grid{
     display:grid;
-    grid-template-columns: 420px 1fr;
+    grid-template-columns: 360px minmax(0, 1fr);
     gap:14px;
   }
   @media (max-width: 980px){
@@ -86,7 +86,15 @@
   .rep_status.ok{ color: rgba(105,240,174,.85); }
   .rep_status.err{ color: rgba(255,82,82,.9); }
 
-  .rep_outputWrap{ padding: 12px; }
+  .rep_outputWrap{
+    padding: 16px;
+    background: #ffffff;
+    color: #000000;
+    border-radius: 12px;
+    min-height: 720px;
+    overflow: auto;
+  }
+  .rep_outputWrap img{ max-width:100%; height:auto; }
   #rep_output a{ color: var(--link); }
 
   .rep_mini{ font-size:11.5px; color:var(--muted2); }
@@ -126,11 +134,11 @@
   <div class="rep_panel">
     <div class="rep_hd">
       <h2>Preview</h2>
-      <span class="rep_mini">Generated HTML blocks</span>
+      <span class="rep_mini">Full email preview</span>
     </div>
     <div class="rep_outputWrap">
       <div id="rep_output" class="rep_mini" style="color:var(--muted);">
-        Your generated report will appear here.
+        Loading example report…
       </div>
     </div>
   </div>
@@ -139,7 +147,18 @@
 <script>
   // optional init hook so index can call it
   window.__init_report = function(){
-    // no-op for now (kept for consistency with other pages)
+    google.script.run
+      .withSuccessHandler(html => {
+        if (html) {
+          window.__repSampleHtml = html;
+          document.getElementById("rep_output").innerHTML = html;
+        }
+      })
+      .withFailureHandler(() => {
+        document.getElementById("rep_output").textContent =
+          "Example report unavailable. Generate a report to preview.";
+      })
+      .ui_getFuturescansPreviewSample();
   };
 
   function fsReport_setBusy(isBusy, msg) {
@@ -174,7 +193,12 @@
 
   function fsReport_clearAll(){
     document.getElementById("rep_linksInput").value = "";
-    document.getElementById("rep_output").innerHTML = '<span style="color:rgba(255,255,255,.55)">Cleared.</span>';
+    if (window.__repSampleHtml) {
+      document.getElementById("rep_output").innerHTML = window.__repSampleHtml;
+    } else {
+      document.getElementById("rep_output").innerHTML =
+        '<span style="color:rgba(255,255,255,.55)">Cleared.</span>';
+    }
     fsReport_setBusy(false, "Ready.");
   }
 
