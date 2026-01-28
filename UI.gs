@@ -691,6 +691,14 @@ function rss_getFeedsHeaderRow_(startRow) {
 }
 
 function rss_normalizeHeader_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function rss_buildFeedColumnMap_(header) {
   return String(value || "").trim().toLowerCase();
 }
 
@@ -705,6 +713,7 @@ function rss_getFeedColumnMap_(sh, startRow) {
     url: ["feed url", "url", "rss url"],
     tags: ["tags", "tag", "theme", "themes"],
     notes: ["notes", "note"],
+    active: ["active", "active", "enabled", "status"]
     active: ["active", "active?", "enabled", "status"]
   };
 
@@ -719,6 +728,31 @@ function rss_getFeedColumnMap_(sh, startRow) {
     });
   });
 
+  return {
+    map,
+    matches: Object.values(map).filter(Boolean).length
+  };
+}
+
+function rss_getFeedColumnMap_(sh, startRow) {
+  const headerRow = rss_getFeedsHeaderRow_(startRow);
+  const lastCol = Math.max(5, sh.getLastColumn());
+  const header = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] || [];
+  const headerMap = rss_buildFeedColumnMap_(header);
+
+  let best = headerMap;
+  let bestHeader = header;
+
+  if (Number(startRow) !== headerRow) {
+    const altHeader = sh.getRange(startRow, 1, 1, lastCol).getValues()[0] || [];
+    const altMap = rss_buildFeedColumnMap_(altHeader);
+    if (altMap.matches > best.matches) {
+      best = altMap;
+      bestHeader = altHeader;
+    }
+  }
+
+  if (!best.matches) {
   const foundAny = Object.values(map).some(Boolean);
   if (!foundAny) {
     return {
@@ -730,6 +764,11 @@ function rss_getFeedColumnMap_(sh, startRow) {
     };
   }
 
+  if (!best.map.active && bestHeader.length >= 5) {
+    best.map.active = 5;
+  }
+
+  return best.map;
   if (!map.active && header.length >= 5) {
     map.active = 5;
   }
