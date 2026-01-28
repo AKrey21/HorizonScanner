@@ -654,18 +654,19 @@ function ui_getRawArticles_bootstrap_v1() {
 
 /*********************************
  * UI_RSSFeeds.gs — RSS Feeds UI API (collision-safe)
- * Sheet starts at row RSS_FEEDS_START_ROW, columns A:D by default:
+ * Sheet starts at row RSS_FEEDS_START_ROW, columns A:E by default:
  *   A: Source
  *   B: Feed URL
- *   C: Notes (optional)
- *   D: Active (checkbox)
+ *   C: Tags / Theme (optional)
+ *   D: Notes (optional)
+ *   E: Active (checkbox)
  *********************************/
 
 // Fallbacks (won’t error if you haven’t defined constants elsewhere)
 // Renamed to reduce collision risk across files
 const RSS_UI_FEEDS_SHEET_FALLBACK = "RSS Feeds";
 const RSS_UI_FEEDS_START_ROW_FALLBACK = 2;
-const RSS_UI_FEEDS_COLS_FALLBACK = 4;
+const RSS_UI_FEEDS_COLS_FALLBACK = 5;
 
 function rss_getRssFeedsSheetName_() {
   // If you already have a constant elsewhere, we’ll use it.
@@ -851,11 +852,11 @@ function ui_getRssFeeds(params) {
           active
         };
       })
-      .filter(r => r.source || r.url || r.notes);
+      .filter(r => r.source || r.url || r.tags || r.notes);
 
     // Search filter
     const filtered = allRows.filter(r =>
-      rss_rowMatchesQuery_([r.source, r.url, r.notes, r.active], qLower)
+      rss_rowMatchesQuery_([r.source, r.url, r.tags, r.notes, r.active], qLower)
     );
 
     const totalMatches = filtered.length;
@@ -881,7 +882,7 @@ function ui_getRssFeeds(params) {
 
 /**
  * SAVE edits
- * payload: { edits: [{rowIndex, source, url, notes, active}] }
+ * payload: { edits: [{rowIndex, source, url, tags, notes, active}] }
  */
 function ui_saveRssFeeds(payload) {
   try {
@@ -951,7 +952,7 @@ function ui_addRssFeed() {
 
     return {
       ok: true,
-      row: { rowIndex: newRow, source: "", url: "", notes: "", active: true }
+      row: { rowIndex: newRow, source: "", url: "", tags: "", notes: "", active: true }
     };
   } catch (err) {
     return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };
