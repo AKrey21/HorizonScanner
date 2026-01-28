@@ -69,22 +69,66 @@ function repo_getActiveFeeds_() {
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
 
-  // Read A:E
-  const values = sh.getRange(2, 1, lastRow - 1, 5).getValues();
+  const columnMap = repo_getFeedsColumnMap_(sh);
+  const maxCol = repo_getFeedsMaxCol_(columnMap);
+  const values = sh.getRange(2, 1, lastRow - 1, maxCol).getValues();
 
   return values
     .map(r => {
-      const source = String(r[0] || "").trim();
-      const url    = String(r[1] || "").trim();
-      const tags   = String(r[2] || "").trim();
-      const notes  = String(r[3] || "").trim();
-      const activeRaw = r[4];
+      const source = columnMap.source ? String(r[columnMap.source - 1] || "").trim() : "";
+      const url    = columnMap.url ? String(r[columnMap.url - 1] || "").trim() : "";
+      const tags   = columnMap.tags ? String(r[columnMap.tags - 1] || "").trim() : "";
+      const notes  = columnMap.notes ? String(r[columnMap.notes - 1] || "").trim() : "";
+      const activeRaw = columnMap.active ? r[columnMap.active - 1] : false;
       const active =
         activeRaw === true || activeRaw === 1 || String(activeRaw).trim().toLowerCase() === "true";
 
       return { url, active, sourceName: source, tags, notes };
     })
     .filter(x => x.active && x.url);
+}
+
+function repo_normalizeFeedHeader_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function repo_getFeedsColumnMap_(sh) {
+  const lastCol = Math.max(4, sh.getLastColumn());
+  const header = sh.getRange(1, 1, 1, lastCol).getValues()[0] || [];
+  const map = {};
+  const labels = {
+    source: ["source", "source name"],
+    url: ["feed url", "url", "rss url"],
+    tags: ["tags", "tag", "theme", "themes"],
+    notes: ["notes", "note"],
+    active: ["active", "enabled", "status"]
+  };
+
+  header.forEach((cell, idx) => {
+    const key = repo_normalizeFeedHeader_(cell);
+    if (!key) return;
+    Object.keys(labels).forEach(field => {
+      if (map[field]) return;
+      if (labels[field].includes(key)) {
+        map[field] = idx + 1;
+      }
+    });
+  });
+
+  if (!Object.keys(map).length) {
+    return { source: 1, url: 2, tags: 3, notes: 4, active: 5 };
+  }
+
+  return map;
+}
+
+function repo_getFeedsMaxCol_(map) {
+  const cols = Object.values(map).filter(Boolean);
+  return cols.length ? Math.max(...cols) : 5;
 }
 
 // --- THEME RULES (A:Theme B:POI C:Keywords D:Active) ---
