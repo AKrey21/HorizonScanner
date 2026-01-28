@@ -22,23 +22,54 @@ function ui_generateFuturescanReportFromLinks(linksText) {
     includePdf: ENABLE_PDF_GENERATION
   });
 
-  const blocks = topics.map(t =>
-    renderTopicBlock_(
-      t.topicNo,
-      t.title,
-      t.relevance20,
-      t.summaryHtml,
-      t.imageUrl,
-      t.pdfUrl || "",
-      t.articleUrl
-    )
-  );
+  const tz = Session.getScriptTimeZone();
+  const weekLabel = Utilities.formatDate(new Date(), tz, "dd MMM yyyy");
 
-  return `
-    <div style="font-family:Arial, sans-serif; font-size:13px;">
-      ${blocks.join("\n")}
-    </div>
-  `;
+  return buildFuturescansPreviewHtml_(topics, weekLabel);
+}
+
+function ui_getFuturescansPreviewSample() {
+  const weekLabel = "DD MMM 2025";
+  const topics = [
+    {
+      topicNo: 1,
+      title: "[Title]",
+      relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
+      summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
+      imageUrl: "",
+      articleUrl: "#",
+      attachmentLabel: "Article 1 \u2013 xxx.pdf"
+    },
+    {
+      topicNo: 2,
+      title: "[Title]",
+      relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
+      summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
+      imageUrl: "",
+      articleUrl: "#",
+      attachmentLabel: "Article 2 \u2013 xxx.pdf"
+    },
+    {
+      topicNo: 3,
+      title: "[Title]",
+      relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
+      summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
+      imageUrl: "",
+      articleUrl: "#",
+      attachmentLabel: "Article 3 \u2013 xxx.pdf"
+    },
+    {
+      topicNo: 4,
+      title: "[Title]",
+      relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
+      summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
+      imageUrl: "",
+      articleUrl: "#",
+      attachmentLabel: "Article 4 \u2013 xxx.pdf"
+    }
+  ];
+
+  return buildFuturescansPreviewHtml_(topics, weekLabel);
 }
 
 /* =========================================================================
