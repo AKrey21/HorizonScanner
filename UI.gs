@@ -684,6 +684,101 @@ function rss_getRssFeedsCols_() {
   return RSS_UI_FEEDS_COLS_FALLBACK;
 }
 
+function rss_getFeedsHeaderRow_(startRow) {
+  const row = Number(startRow || 1);
+  return row > 1 ? row - 1 : 1;
+}
+
+function rss_normalizeHeader_(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function rss_buildFeedColumnMap_(header) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function rss_getFeedColumnMap_(sh, startRow) {
+  const headerRow = rss_getFeedsHeaderRow_(startRow);
+  const lastCol = Math.max(5, sh.getLastColumn());
+  const header = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] || [];
+
+  const map = {};
+  const labels = {
+    source: ["source", "source name"],
+    url: ["feed url", "url", "rss url"],
+    tags: ["tags", "tag", "theme", "themes"],
+    notes: ["notes", "note"],
+    active: ["active", "active", "enabled", "status"]
+  };
+
+  header.forEach((cell, idx) => {
+    const key = rss_normalizeHeader_(cell);
+    if (!key) return;
+    Object.keys(labels).forEach(field => {
+      if (map[field]) return;
+      if (labels[field].includes(key)) {
+        map[field] = idx + 1;
+      }
+    });
+  });
+
+  return {
+    map,
+    matches: Object.values(map).filter(Boolean).length
+  };
+}
+
+function rss_getFeedColumnMap_(sh, startRow) {
+  const headerRow = rss_getFeedsHeaderRow_(startRow);
+  const lastCol = Math.max(5, sh.getLastColumn());
+  const header = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0] || [];
+  const headerMap = rss_buildFeedColumnMap_(header);
+
+  let best = headerMap;
+  let bestHeader = header;
+
+  if (Number(startRow) !== headerRow) {
+    const altHeader = sh.getRange(startRow, 1, 1, lastCol).getValues()[0] || [];
+    const altMap = rss_buildFeedColumnMap_(altHeader);
+    if (altMap.matches > best.matches) {
+      best = altMap;
+      bestHeader = altHeader;
+    }
+  }
+
+  if (!best.matches) {
+  const foundAny = Object.values(map).some(Boolean);
+  if (!foundAny) {
+    return {
+      source: 1,
+      url: 2,
+      tags: 3,
+      notes: 4,
+      active: 5
+    };
+  }
+
+  if (!best.map.active && bestHeader.length >= 5) {
+    best.map.active = 5;
+  }
+
+  return best.map;
+  if (!map.active && header.length >= 5) {
+    map.active = 5;
+  }
+
+  return map;
+}
+
+function rss_getFeedMaxCol_(map) {
+  const cols = Object.values(map).filter(Boolean);
+  return cols.length ? Math.max(...cols) : 5;
+}
+
 // Renamed to avoid collisions with other helperFunctions.gs etc.
 function rss_clampInt_(n, min, max) {
   n = Number(n);
@@ -732,7 +827,8 @@ function ui_getRssFeeds(params) {
       return { ok: true, sheet: sheetName, page, pageSize, totalRows: 0, totalMatches: 0, rows: [] };
     }
 
-    const cols = rss_getRssFeedsCols_();
+    const columnMap = rss_getFeedColumnMap_(sh, startRow);
+    const cols = rss_getFeedMaxCol_(columnMap) || rss_getRssFeedsCols_();
     const height = lastRow - startRow + 1;
 
     const values = sh.getRange(startRow, 1, height, cols).getValues();
@@ -740,7 +836,7 @@ function ui_getRssFeeds(params) {
     // Build row objects + filter blanks
     const allRows = values
       .map((r, idx) => {
-        const activeRaw = r[3];
+        const activeRaw = columnMap.active ? r[columnMap.active - 1] : false;
         const active =
           activeRaw === true ||
           activeRaw === 1 ||
@@ -748,9 +844,10 @@ function ui_getRssFeeds(params) {
 
         return {
           rowIndex: startRow + idx,
-          source: String(r[0] || "").trim(),
-          url: String(r[1] || "").trim(),
-          notes: String(r[2] || "").trim(),
+          source: columnMap.source ? String(r[columnMap.source - 1] || "").trim() : "",
+          url: columnMap.url ? String(r[columnMap.url - 1] || "").trim() : "",
+          tags: columnMap.tags ? String(r[columnMap.tags - 1] || "").trim() : "",
+          notes: columnMap.notes ? String(r[columnMap.notes - 1] || "").trim() : "",
           active
         };
       })
@@ -798,16 +895,21 @@ function ui_saveRssFeeds(payload) {
     if (!sh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
 
     const startRow = rss_getRssFeedsStartRow_();
+    const columnMap = rss_getFeedColumnMap_(sh, startRow);
+
     edits.forEach(e => {
       const rowIndex = Number(e.rowIndex);
       if (!rowIndex || rowIndex < startRow) return;
 
-      sh.getRange(rowIndex, 1).setValue(String(e.source || "").trim());
-      sh.getRange(rowIndex, 2).setValue(String(e.url || "").trim());
-      sh.getRange(rowIndex, 3).setValue(String(e.notes || "").trim());
-      const cell = sh.getRange(rowIndex, 4);
-      cell.setValue(e.active === true);
-      cell.insertCheckboxes();
+      if (columnMap.source) sh.getRange(rowIndex, columnMap.source).setValue(String(e.source || "").trim());
+      if (columnMap.url) sh.getRange(rowIndex, columnMap.url).setValue(String(e.url || "").trim());
+      if (columnMap.tags) sh.getRange(rowIndex, columnMap.tags).setValue(String(e.tags || "").trim());
+      if (columnMap.notes) sh.getRange(rowIndex, columnMap.notes).setValue(String(e.notes || "").trim());
+      if (columnMap.active) {
+        const cell = sh.getRange(rowIndex, columnMap.active);
+        cell.setValue(e.active === true);
+        cell.insertCheckboxes();
+      }
     });
 
     return { ok: true, saved: edits.length };
@@ -827,21 +929,25 @@ function ui_addRssFeed() {
     if (!sh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
 
     const startRow = rss_getRssFeedsStartRow_();
+    const columnMap = rss_getFeedColumnMap_(sh, startRow);
+    const maxCol = rss_getFeedMaxCol_(columnMap) || rss_getRssFeedsCols_();
     const lastRow = Math.max(sh.getLastRow(), startRow - 1);
 
     sh.insertRowAfter(lastRow);
     const newRow = lastRow + 1;
 
-    const template = sh.getRange(startRow, 1, 1, rss_getRssFeedsCols_());
-    const dest = sh.getRange(newRow, 1, 1, rss_getRssFeedsCols_());
+    const template = sh.getRange(startRow, 1, 1, maxCol);
+    const dest = sh.getRange(newRow, 1, 1, maxCol);
 
     template.copyTo(dest, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
     template.copyTo(dest, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
 
     dest.clearContent();
-    const cell = sh.getRange(newRow, 4);
-    cell.setValue(true);
-    cell.insertCheckboxes();
+    if (columnMap.active) {
+      const cell = sh.getRange(newRow, columnMap.active);
+      cell.setValue(true);
+      cell.insertCheckboxes();
+    }
 
     return {
       ok: true,
