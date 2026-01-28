@@ -4,7 +4,7 @@
   /* ===== Report Generator styles (scoped) ===== */
   .rep_grid{
     display:grid;
-    grid-template-columns: 420px 1fr;
+    grid-template-columns: 360px minmax(0, 1fr);
     gap:14px;
   }
   @media (max-width: 980px){
@@ -86,7 +86,15 @@
   .rep_status.ok{ color: rgba(105,240,174,.85); }
   .rep_status.err{ color: rgba(255,82,82,.9); }
 
-  .rep_outputWrap{ padding: 12px; }
+  .rep_outputWrap{
+    padding: 16px;
+    background: #ffffff;
+    color: #000000;
+    border-radius: 12px;
+    min-height: 720px;
+    overflow: auto;
+  }
+  .rep_outputWrap img{ max-width:100%; height:auto; }
   #rep_output a{ color: var(--link); }
 
   .rep_mini{ font-size:11.5px; color:var(--muted2); }

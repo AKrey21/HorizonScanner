@@ -23,6 +23,7 @@ const EML_OUTPUT_FOLDER_ID = "PASTE_EML_OUTPUT_FOLDER_ID_HERE"; // optional
 
 // ===== FutureScans banner (Drive asset) =====
 const FS_BANNER_FILE_ID = "13g5m1yI6V5Fcjvl57aEUZcHYq1lfnk6g"; // Banner.jpg in Drive
+const FS_BANNER_FOLDER_ID = "1yuFMdayHpj9UB2qM14CORFii6LUCVJxp"; // Banner folder in Drive
 
 // Browser-ish UA for image fetch fallback
 const EMAIL_UA =
@@ -209,9 +210,10 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   // ---- Banner (Drive asset → CID) ----
   // Always attach banner, and force JPG mime so Outlook renders it reliably.
   try {
-    const bannerFile = DriveApp.getFileById(FS_BANNER_FILE_ID);
+    const bannerBlobSource = getFsBannerBlob_();
+    if (!bannerBlobSource) throw new Error("No banner file found.");
 
-    let bannerBlob = bannerFile.getBlob();
+    let bannerBlob = bannerBlobSource.getBlob();
     // Force correct metadata (Drive sometimes returns application/octet-stream)
     bannerBlob = bannerBlob
       .setName("fs_banner.jpg")
