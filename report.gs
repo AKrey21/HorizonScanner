@@ -71,7 +71,7 @@ function ui_buildOutlookEmlFromLinks_v1(linksText) {
 }
 
 /* =========================================================================
- * UI: Generate Outlook draft (.eml) v2 — EmailTemplateBody.html + CID images
+ * UI: Generate Outlook draft (.eml) v2 — EmailTemplateBody.html + CID images + PDFs
  * Returns: { filename, b64 }
  * ========================================================================= */
 
@@ -82,8 +82,16 @@ function ui_buildOutlookEmlFromLinks_v2(linksText) {
   const weekLabel = Utilities.formatDate(new Date(), tz, "dd MMM yyyy");
   const subject = `FutureScans@MOM — Week of ${weekLabel}`;
 
-  const built = buildEmailFromWordTemplate_v2_(topics, weekLabel);
-  const eml = buildEmlMultipartRelated_v2_(subject, built.htmlBody, built.inlineImages);
+  const pkg = buildFuturescansEmailPackage_v3_(subject, topics, weekLabel, {
+    makePdf: true,
+    pdfMode: "replica"
+  });
+  const eml = buildEmlMultipartMixed_v3_(
+    pkg.subject,
+    pkg.htmlBody,
+    pkg.inlineImages,
+    pkg.attachments
+  );
 
   const b64 = Utilities.base64EncodeWebSafe(eml);
   const filename = `FutureScans_${weekLabel.replace(/ /g, "_")}.eml`;
