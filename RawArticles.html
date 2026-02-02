@@ -2,15 +2,15 @@
   <style>
     /* ===== Layout: fill available height from index.html container ===== */
     #raw-root{
-      --fs-bg:#E5EEFB;
-      --fs-surface:#ffffff;
-      --fs-border:rgba(0,42,123,.18);
-      --fs-text:#002A7B;
-      --fs-muted:rgba(0,42,123,.65);
-      --fs-muted-weak:rgba(0,42,123,.45);
+      --fs-bg:#061432;
+      --fs-surface:#0c1f4a;
+      --fs-border:rgba(229,238,251,.16);
+      --fs-text:#E5EEFB;
+      --fs-muted:rgba(229,238,251,.7);
+      --fs-muted-weak:rgba(229,238,251,.5);
       --fs-accent:#FF7300;
       --fs-accent-soft:rgba(255,115,0,.18);
-      --fs-primary-soft:rgba(0,42,123,.08);
+      --fs-primary-soft:rgba(0,42,123,.3);
       --fs-header-bg:#002A7B;
       --fs-header-text:#E5EEFB;
       height:100%;
@@ -41,9 +41,9 @@
     }
     .btn{ cursor:pointer; }
     .btn.primary{
-      border-color: var(--fs-text);
-      background: var(--fs-text);
-      color: var(--fs-header-text);
+      border-color: var(--fs-accent);
+      background: var(--fs-accent);
+      color: #1b1b1b;
     }
     .btn.ghost{ background: transparent; }
     .btn.mini{ padding:8px 10px; }
@@ -75,7 +75,7 @@
       display:none;
     }
     .notice.show{ display:block; }
-    .notice.ok{ border-color: rgba(0,42,123,.25); background: rgba(0,42,123,.08); }
+    .notice.ok{ border-color: rgba(0,42,123,.6); background: rgba(0,42,123,.35); }
     .notice.err{ border-color: rgba(255,115,0,.45); background: rgba(255,115,0,.14); }
     .notice.busy{ border-color: rgba(0,42,123,.35); background: rgba(0,42,123,.10); }
     .notice.warn{ border-color: rgba(255,115,0,.35); background: rgba(255,115,0,.12); }
@@ -83,7 +83,7 @@
     .summaryBar{
       display:flex; flex-wrap:wrap; gap:8px; align-items:center;
       border:1px solid var(--fs-border);
-      background: var(--fs-surface);
+      background: rgba(0,42,123,.35);
       border-radius:14px;
       padding:8px 10px;
       color:var(--fs-muted);
@@ -159,7 +159,7 @@
       border:1px solid var(--fs-border);
       border-radius:14px;
       overflow:hidden; /* switched by JS depending on Fit screen */
-      background: var(--fs-surface);
+      background: rgba(6,20,50,.9);
     }
 
     table{
@@ -185,8 +185,8 @@
       vertical-align:top;
       word-break:break-word; /* ✅ wrap long text */
     }
-    tbody tr:nth-child(2n) td{ background: rgba(0,42,123,.03); }
-    tbody tr:hover td{ background: var(--fs-accent-soft); }
+    tbody tr:nth-child(2n) td{ background: rgba(0,42,123,.2); }
+    tbody tr:hover td{ background: rgba(255,115,0,.25); }
 
     a{ color:var(--fs-text); text-decoration:none; word-break:break-word; }
     a:hover{ text-decoration:underline; }

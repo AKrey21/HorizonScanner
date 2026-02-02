@@ -9,17 +9,18 @@
 
     <style>
       :root{
-        --bg:#E5EEFB;
-        --surface:#ffffff;
-        --border:rgba(0,42,123,.18);
-        --text:#002A7B;
-        --muted:rgba(0,42,123,.65);
-        --muted2:rgba(0,42,123,.45);
-        --link:#002A7B;
+        --bg:#061432;
+        --surface:#0c1f4a;
+        --border:rgba(229,238,251,.12);
+        --text:#E5EEFB;
+        --muted:rgba(229,238,251,.7);
+        --muted2:rgba(229,238,251,.5);
+        --link:#E5EEFB;
         --accent:#FF7300;
         --accent-soft:rgba(255,115,0,.18);
         --sidebar-bg:#002A7B;
         --sidebar-text:#E5EEFB;
+        --sidebar-border:rgba(229,238,251,.18);
       }
 
       * { box-sizing: border-box; }
@@ -34,8 +35,8 @@
       body{
         margin:0;
         font-family: Arial, Helvetica, sans-serif;
-        background: radial-gradient(1200px 700px at 15% 10%, rgba(0,42,123,.12), transparent 60%),
-                    radial-gradient(900px 600px at 80% 12%, rgba(255,115,0,.14), transparent 55%),
+        background: radial-gradient(1200px 700px at 15% 10%, rgba(0,42,123,.55), transparent 60%),
+                    radial-gradient(900px 600px at 80% 12%, rgba(255,115,0,.18), transparent 55%),
                     var(--bg);
         color:var(--text);
 
@@ -60,6 +61,7 @@
         display:flex;
         flex-direction:column;
         gap:18px;
+        border-right: 1px solid var(--sidebar-border);
       }
 
       .brand{
@@ -90,8 +92,8 @@
         flex-direction:column;
       }
       .tab{
-        border:1px solid rgba(229,238,251,.2);
-        background: rgba(229,238,251,.08);
+        border:1px solid rgba(229,238,251,.24);
+        background: rgba(229,238,251,.1);
         color:var(--sidebar-text);
         padding:10px 12px;
         border-radius:12px;
@@ -112,6 +114,7 @@
       */
       .content{
         flex:1 1 auto;
+        background: linear-gradient(180deg, rgba(12,31,74,.65), rgba(6,20,50,.9));
       }
 
       #app-wrap{
