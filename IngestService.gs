@@ -19,6 +19,8 @@ var ING_CFG = (function () {
   var fetchTimeoutMs = (typeof INGEST_FETCH_TIMEOUT_MS !== "undefined") ? INGEST_FETCH_TIMEOUT_MS : 15000;
   var maxRuntimeMs = (typeof INGEST_MAX_RUNTIME_MS !== "undefined") ? INGEST_MAX_RUNTIME_MS : 330000;
   var fetchBatchSize = (typeof INGEST_FETCH_BATCH_SIZE !== "undefined") ? INGEST_FETCH_BATCH_SIZE : 15;
+  var dailyDaysBack = (typeof INGEST_DAILY_DAYS_BACK !== "undefined") ? INGEST_DAILY_DAYS_BACK : 1;
+  var pruneDays = (typeof INGEST_PRUNE_DAYS !== "undefined") ? INGEST_PRUNE_DAYS : 30;
 
   // If your UI.gs defines SPREADSHEET_ID, reuse it.
   var spreadsheetId = (typeof SPREADSHEET_ID !== "undefined") ? SPREADSHEET_ID : "";
@@ -32,6 +34,8 @@ var ING_CFG = (function () {
     INGEST_FETCH_TIMEOUT_MS: fetchTimeoutMs,
     INGEST_MAX_RUNTIME_MS: maxRuntimeMs,
     INGEST_FETCH_BATCH_SIZE: fetchBatchSize,
+    INGEST_DAILY_DAYS_BACK: dailyDaysBack,
+    INGEST_PRUNE_DAYS: pruneDays,
     SPREADSHEET_ID: spreadsheetId
   };
 })();
@@ -64,6 +68,38 @@ function ui_importRSS_ping() {
   return { ok:true, _sig:"IngestService.ping @ 2026-01-13", now: new Date().toISOString() };
 }
 
+/**
+ * Daily ingest runner (intended for 12:00 daily trigger)
+ * - Prunes raw articles older than INGEST_PRUNE_DAYS
+ * - Appends new articles (no duplicates)
+ */
+function ingest_dailyRawArticles_() {
+  var pruneStats = repo_pruneRawArticlesByAge_(ING_CFG.INGEST_PRUNE_DAYS);
+  var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
+  ingestRes.prune = pruneStats;
+  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+  return ingestRes;
+}
+
+/**
+ * One-time helper to install a 12:00 daily trigger for ingest_dailyRawArticles_.
+ */
+function ingest_setupDailyRawIngestTrigger_() {
+  var handlerName = "ingest_dailyRawArticles_";
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction && t.getHandlerFunction() === handlerName) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  ScriptApp.newTrigger(handlerName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(12)
+    .create();
+  return { ok: true, handler: handlerName, atHour: 12 };
+}
+
 /* ========= MAIN INGEST ========= */
 
 /**
@@ -91,8 +127,6 @@ function ingest_importRSS_(daysBack) {
   var errors = [];
 
   try {
-    repo_resetRawArticles_();
-
     var themeRules = repo_getActiveThemeRules_();
     var feeds = repo_getActiveFeeds_();
     stats.feedsActive = feeds.length;
@@ -125,7 +159,7 @@ function ingest_importRSS_(daysBack) {
       cutoff.setDate(cutoff.getDate() - Number(daysBack));
     }
 
-    var seenLinks = new Set();
+    var seenLinks = ingest_buildExistingLinkSet_();
 
     var allRowsToWrite = [];
     var maxRuntimeMs = ING_CFG.INGEST_MAX_RUNTIME_MS;
@@ -330,6 +364,16 @@ function ingest_importRSS_(daysBack) {
       debug: { where: "top-level catch", _err: String(err) }
     };
   }
+}
+
+function ingest_buildExistingLinkSet_() {
+  var links = repo_getRawArticleLinks_();
+  var set = new Set();
+  links.forEach(function (rawLink) {
+    var linkKey = ingest_normalizeLink_(rawLink);
+    if (linkKey) set.add(linkKey);
+  });
+  return set;
 }
 
 /* ========= KEYWORDS / MATCHING ========= */

@@ -239,13 +239,15 @@
     <button class="btn" onclick="raw_clear()">Clear</button>
 
     <div class="rightControls">
-      <select id="raw-importRange" title="Ingest range">
-        <option value="7" selected>Ingest: last 7 days</option>
-        <option value="30">Ingest: last 30 days</option>
-        <option value="all">Ingest: all time</option>
-      </select>
-
-      <button class="btn primary" id="raw-importBtn" onclick="raw_importRss()">Ingest RSS</button>
+      <div class="label" style="margin-right:6px;">Ingest RSS:</div>
+      <div class="row tight" style="flex-wrap:wrap;">
+        <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Last 7 days</button>
+        <button class="btn" id="raw-import30Btn" onclick="raw_importRss('30')">Last 30 days</button>
+        <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">All time</button>
+        <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
+          Daily (12:00 + prune 30d)
+        </button>
+      </div>
       <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
     </div>
   </div>
@@ -408,7 +410,10 @@
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
 
   function raw_setBusyUI(isBusy){
-    R("raw-importBtn").disabled = !!isBusy;
+    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn"].forEach(id => {
+      const btn = R(id);
+      if (btn) btn.disabled = !!isBusy;
+    });
     R("raw-refreshBtn").disabled = !!isBusy;
   }
 
@@ -819,8 +824,8 @@
     if (el === R("raw-kwExcAdd")) { raw_addFacet("kwExc"); return; }
   });
 
-  function raw_importRss() {
-    const range = (R("raw-importRange").value || "7").trim();
+  function raw_importRss(rangeOverride) {
+    const range = String(rangeOverride || "7").trim();
     raw_setBusyUI(true);
 
     const startTs = Date.now();
@@ -835,7 +840,8 @@
     raw_runRpc(
       "Ingesting RSS",
       (gs) => {
-        if (range === "30") gs.ui_importRSS_30days_v2();
+        if (range === "daily") gs.ingest_dailyRawArticles_();
+        else if (range === "30") gs.ui_importRSS_30days_v2();
         else if (range === "all") gs.ui_importRSS_all_v2();
         else gs.ui_importRSS_7days_v2();
       },
@@ -862,6 +868,10 @@
           `No-match skipped: ${s.skippedNoMatch || 0}\n` +
           `Missing fields skipped: ${s.skippedMissingFields || 0}\n` +
           `Feed errors: ${s.feedErrors || 0}`;
+
+        if (res.prune) {
+          msg += `\nPruned (>30 days): ${res.prune.removed || 0}`;
+        }
 
         if (Array.isArray(res.errors) && res.errors.length) {
           msg += `\n\nErrors (first ${Math.min(10, res.errors.length)}):\n- ` +
