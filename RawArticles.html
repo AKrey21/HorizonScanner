@@ -2,33 +2,49 @@
   <style>
     /* ===== Layout: fill available height from index.html container ===== */
     #raw-root{
+      --fs-bg:#061432;
+      --fs-surface:#0c1f4a;
+      --fs-border:rgba(229,238,251,.16);
+      --fs-text:#E5EEFB;
+      --fs-muted:rgba(229,238,251,.7);
+      --fs-muted-weak:rgba(229,238,251,.5);
+      --fs-accent:#FF7300;
+      --fs-accent-soft:rgba(255,115,0,.18);
+      --fs-primary-soft:rgba(0,42,123,.3);
+      --fs-header-bg:#002A7B;
+      --fs-header-text:#E5EEFB;
       height:100%;
       min-height:0;
       display:flex;
       flex-direction:column;
       gap:10px;
+      color:var(--fs-text);
     }
 
     .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     .search{
       flex:1; min-width:240px;
       display:flex; gap:10px; align-items:center;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.05);
+      border:1px solid var(--fs-border);
+      background: var(--fs-surface);
       border-radius:999px; padding:10px 12px;
-      color:#e8eaf0;
+      color:var(--fs-text);
     }
-    .search input{ border:0; outline:0; background:transparent; color:#e8eaf0; width:100%; font-size:13px; }
-    .search .hint{ color:#a7afc0; font-size:11px; white-space:nowrap; }
+    .search input{ border:0; outline:0; background:transparent; color:var(--fs-text); width:100%; font-size:13px; }
+    .search .hint{ color:var(--fs-muted); font-size:11px; white-space:nowrap; }
 
     .btn, select, input[type="date"], input[type="text"]{
-      border-radius:999px; border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.05);
-      color:#e8eaf0;
+      border-radius:999px; border:1px solid var(--fs-border);
+      background: var(--fs-surface);
+      color:var(--fs-text);
       padding:10px 12px; font-size:12px;
     }
     .btn{ cursor:pointer; }
-    .btn.primary{ border-color: rgba(122,162,255,.45); background: rgba(122,162,255,.16); }
+    .btn.primary{
+      border-color: var(--fs-accent);
+      background: var(--fs-accent);
+      color: #1b1b1b;
+    }
     .btn.ghost{ background: transparent; }
     .btn.mini{ padding:8px 10px; }
     .btn:disabled{ opacity:.55; cursor:not-allowed; }
@@ -41,39 +57,39 @@
     .pill{
       padding: 2px 8px;
       border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.05);
+      border: 1px solid var(--fs-border);
+      background: var(--fs-surface);
       font-size: 11px;
-      color:#a7afc0;
+      color:var(--fs-muted);
       white-space:nowrap;
     }
 
     .notice{
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.04);
+      border:1px solid var(--fs-border);
+      background: var(--fs-surface);
       border-radius:14px;
       padding:10px 12px;
-      color:#e8eaf0;
+      color:var(--fs-text);
       font-size:12px;
       white-space:pre-wrap;
       display:none;
     }
     .notice.show{ display:block; }
-    .notice.ok{ border-color: rgba(122,255,170,.30); background: rgba(122,255,170,.10); }
-    .notice.err{ border-color: rgba(255,120,120,.35); background: rgba(255,120,120,.12); }
-    .notice.busy{ border-color: rgba(122,162,255,.35); background: rgba(122,162,255,.10); }
-    .notice.warn{ border-color: rgba(255,210,120,.35); background: rgba(255,210,120,.10); }
+    .notice.ok{ border-color: rgba(0,42,123,.6); background: rgba(0,42,123,.35); }
+    .notice.err{ border-color: rgba(255,115,0,.45); background: rgba(255,115,0,.14); }
+    .notice.busy{ border-color: rgba(0,42,123,.35); background: rgba(0,42,123,.10); }
+    .notice.warn{ border-color: rgba(255,115,0,.35); background: rgba(255,115,0,.12); }
 
     .summaryBar{
       display:flex; flex-wrap:wrap; gap:8px; align-items:center;
-      border:1px solid rgba(255,255,255,.08);
-      background: rgba(255,255,255,.03);
+      border:1px solid var(--fs-border);
+      background: rgba(0,42,123,.35);
       border-radius:14px;
       padding:8px 10px;
-      color:#a7afc0;
+      color:var(--fs-muted);
       font-size:12px;
     }
-    .summaryBar b{ color:#e8eaf0; font-weight:600; }
+    .summaryBar b{ color:var(--fs-text); font-weight:600; }
     .spacer{ flex:1; }
 
     /* ===== Main split-pane: sidebar + table ===== */
@@ -107,15 +123,15 @@
 
     /* Cards */
     .box{
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.04);
+      border:1px solid var(--fs-border);
+      background: var(--fs-surface);
       border-radius:14px;
       padding:10px 12px;
-      color:#e8eaf0;
+      color:var(--fs-text);
       min-width:0;
     }
     .boxHead{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-    .label{ font-size:11px; color:#a7afc0; margin-bottom:6px; }
+    .label{ font-size:11px; color:var(--fs-muted); margin-bottom:6px; }
     .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     .row > *{ flex:1 1 160px; min-width: 160px; }
     .row.tight > *{ flex: 1 1 120px; min-width: 120px; }
@@ -127,58 +143,114 @@
       display:inline-flex; align-items:center; gap:8px;
       padding:2px 10px;
       border-radius:999px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.05);
-      color:#e8eaf0;
+      border:1px solid var(--fs-border);
+      background: var(--fs-surface);
+      color:var(--fs-text);
       font-size:11px;
       max-width: 100%;
     }
     .chip .x{ cursor:pointer; opacity:.75; font-weight:700; line-height:1; }
     .chip .x:hover{ opacity:1; }
 
-    /* ===== Table area: expands (no 70vh limiter) ===== */
+    /* ===== Card list area ===== */
     .wrap{
       flex:1 1 auto;
       min-height:0;
-      border:1px solid rgba(255,255,255,.08);
+      border:1px solid var(--fs-border);
       border-radius:14px;
       overflow:hidden; /* switched by JS depending on Fit screen */
-      background: rgba(255,255,255,.01);
+      background: rgba(6,20,50,.9);
     }
 
-    table{
-      width:100%;
-      border-collapse:collapse;
+    .cards{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap:12px;
+      padding:12px;
+    }
+
+    .card{
+      border:1px solid var(--fs-border);
+      background: linear-gradient(160deg, rgba(12,31,74,.9), rgba(6,20,50,.95));
+      border-radius:16px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      min-height:220px;
+      box-shadow: 0 18px 40px rgba(1,8,24,.35);
+    }
+
+    .card-media{
+      height:120px;
+      padding:12px;
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      background:
+        radial-gradient(120px 80px at 20% 20%, rgba(255,115,0,.35), transparent 60%),
+        radial-gradient(160px 120px at 80% 20%, rgba(229,238,251,.25), transparent 60%),
+        linear-gradient(135deg, rgba(0,42,123,.95), rgba(6,20,50,.95));
+      color:var(--fs-header-text);
+    }
+
+    .card-date{
+      font-size:11px;
+      letter-spacing:.3px;
+      padding:4px 8px;
+      border-radius:999px;
+      background: rgba(6,20,50,.7);
+      border:1px solid rgba(229,238,251,.25);
+    }
+
+    .card-body{
+      padding:12px 14px 6px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .card-title{
+      font-size:14px;
+      font-weight:600;
+      line-height:1.35;
+    }
+
+    .card-desc{
       font-size:12px;
-      table-layout:fixed; /* ✅ avoid horizontal scroll; wrap instead */
+      color:var(--fs-muted);
+      line-height:1.4;
     }
 
-    thead th{
-      position:sticky; top:0; z-index:2;
-      background: rgba(17,21,34,.92);
-      color:#a7afc0; font-weight:600;
-      border-bottom:1px solid rgba(255,255,255,.10);
-      padding:10px;
-      text-align:left;
+    .card-tags{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+
+    .tag{
+      font-size:11px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(229,238,251,.22);
+      background: rgba(229,238,251,.08);
+      color:var(--fs-text);
       white-space:nowrap;
     }
 
-    tbody td{
-      border-bottom:1px solid rgba(255,255,255,.06);
-      padding:10px;
-      vertical-align:top;
-      word-break:break-word; /* ✅ wrap long text */
+    .card-footer{
+      padding:0 14px 12px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
     }
-    tbody tr:nth-child(2n) td{ background: rgba(255,255,255,.02); }
-    tbody tr:hover td{ background: rgba(122,162,255,.10); }
 
-    a{ color:#7aa2ff; text-decoration:none; word-break:break-word; }
+    a{ color:var(--fs-text); text-decoration:none; word-break:break-word; }
     a:hover{ text-decoration:underline; }
 
     .clickable{
       cursor:pointer;
       text-decoration: underline;
-      text-decoration-color: rgba(122,162,255,.35);
+      text-decoration-color: rgba(0,42,123,.35);
       text-underline-offset: 2px;
     }
 
@@ -186,11 +258,11 @@
       display:inline-block;
       padding:2px 8px;
       border-radius:999px;
-      border:1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.05);
+      border:1px solid var(--fs-border);
+      background: var(--fs-surface);
       margin: 0 6px 6px 0;
       font-size: 11px;
-      color:#a7afc0;
+      color:var(--fs-muted);
       white-space: nowrap;
       max-width: 100%;
       overflow:hidden;
@@ -199,14 +271,14 @@
 
     .pager{
       display:flex; gap:8px; align-items:center;
-      color:#a7afc0; font-size:12px; flex-wrap: wrap;
+      color:var(--fs-muted); font-size:12px; flex-wrap: wrap;
     }
 
-    .meta{ color:#a7afc0; font-size:12px; }
+    .meta{ color:var(--fs-muted); font-size:12px; }
 
     .empty{
       padding:18px 14px;
-      color:#a7afc0;
+      color:var(--fs-muted);
       font-size:12px;
       display:none;
     }
@@ -343,10 +415,7 @@
       <div class="meta" id="raw-meta">Loading…</div>
 
       <div class="wrap" id="raw-wrap">
-        <table>
-          <thead id="raw-thead"></thead>
-          <tbody id="raw-tbody"></tbody>
-        </table>
+        <div class="cards" id="raw-cards"></div>
         <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
       </div>
 
@@ -382,7 +451,7 @@
     selKwInc: new Set(),
     selKwExc: new Set(),
 
-    rowH: 44 // used for Fit screen estimate; refined after render
+    rowH: 220 // used for Fit screen estimate; refined after render
   };
 
   const R = (id) => document.getElementById(id);
@@ -537,9 +606,8 @@
     const wrap = R("raw-wrap");
     if (!wrap) return 25;
 
-    const theadH = (R("raw-thead")?.offsetHeight || 38);
     const h = wrap.clientHeight || 0;
-    const usable = Math.max(120, h - theadH - 14);
+    const usable = Math.max(120, h - 14);
 
     const rowH = Math.max(32, Number(rawState.rowH || 44));
     return Math.max(5, Math.floor(usable / rowH));
@@ -578,17 +646,6 @@
         raw_fillDatalist("raw-poiList",    res.facets?.pois || []);
         raw_fillDatalist("raw-sourceList", res.facets?.sources || []);
         raw_fillDatalist("raw-kwList",     res.facets?.keywords || []);
-
-        // header (fixed)
-        R("raw-thead").innerHTML =
-          "<tr>" +
-          "<th style='width:38%'>Title</th>" +
-          "<th style='width:14%'>Date</th>" +
-          "<th style='width:12%'>Source</th>" +
-          "<th style='width:12%'>Theme</th>" +
-          "<th style='width:16%'>Point of Interest</th>" +
-          "<th style='width:18%'>Matching Keywords</th>" +
-          "</tr>";
 
         raw_renderAllChips();
         raw_apply(true);
@@ -704,40 +761,59 @@
 
     R("raw-meta").textContent = `Sheet: ${sheet} • Total: ${grandTotal} • Filtered: ${total} • Rows/page: ${pageSize}`;
     R("raw-showing").textContent = `Showing: ${slice.length}`;
-    R("raw-lastRefresh").textContent = "Table @ " + new Date().toLocaleTimeString();
+    R("raw-lastRefresh").textContent = "Updated @ " + new Date().toLocaleTimeString();
 
     const empty = R("raw-empty");
     empty.style.display = total ? "none" : "block";
 
-    R("raw-tbody").innerHTML = slice.map(r => {
+    R("raw-cards").innerHTML = slice.map(r => {
       const title = raw_escape(r.title || "");
       const link = (r.link || "").trim();
+      const dateLabel = raw_escape(r.dateDisplay || "No date");
       const titleHtml = link
         ? `<a href="${raw_escape(link)}" target="_blank" rel="noopener noreferrer">${title}</a>`
         : title;
 
-      const kws = (r.keywordsList || []).slice(0, 14)
-        .map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
-
       const srcRaw = String(r.source || "");
       const thmRaw = String(r.theme || "");
       const poiRaw = String(r.poi || "");
+      const descParts = [];
+      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
+      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
+      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
+      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
+
+      const kws = (r.keywordsList || []).slice(0, 8)
+        .map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
+
+      const tag = (kind, value) => value
+        ? `<span class="tag clickable" data-kind="${kind}" data-v="${raw_attr(value)}">${raw_escape(value)}</span>`
+        : "";
 
       return `
-        <tr>
-          <td>${titleHtml}</td>
-          <td>${raw_escape(r.dateDisplay || "")}</td>
-          <td><span class="clickable" data-kind="source" data-v="${raw_attr(srcRaw)}">${raw_escape(srcRaw)}</span></td>
-          <td><span class="clickable" data-kind="theme" data-v="${raw_attr(thmRaw)}">${raw_escape(thmRaw)}</span></td>
-          <td><span class="clickable" data-kind="poi" data-v="${raw_attr(poiRaw)}">${raw_escape(poiRaw)}</span></td>
-          <td>${kws}</td>
-        </tr>
+        <article class="card">
+          <div class="card-media">
+            <span class="card-date">${dateLabel}</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">${titleHtml}</div>
+            <div class="card-desc">${desc}</div>
+            <div class="card-tags">
+              ${tag("source", srcRaw)}
+              ${tag("theme", thmRaw)}
+              ${tag("poi", poiRaw)}
+            </div>
+          </div>
+          <div class="card-footer">
+            ${kws}
+          </div>
+        </article>
       `;
     }).join("");
 
     // refine row height for Fit screen mode (after we have rows)
-    const firstRow = R("raw-tbody").querySelector("tr");
-    if (firstRow && firstRow.offsetHeight) rawState.rowH = firstRow.offsetHeight;
+    const firstCard = R("raw-cards").querySelector(".card");
+    if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
 
     raw_noticeClear();
   }
@@ -777,7 +853,7 @@
   }
 
   // quick-filter by clicking cells
-  R("raw-tbody").addEventListener("click", (e) => {
+  R("raw-cards").addEventListener("click", (e) => {
     const t = e.target;
     if (!t || !t.dataset) return;
     const kind = t.dataset.kind;
