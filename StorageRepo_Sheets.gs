@@ -47,11 +47,7 @@ function repo_resetRawArticles_() {
   const sh = repo_getOrCreateSheet_(repo_getRawSheetName_());
   sh.clearContents();
 
-  sh.appendRow([
-    "Title", "Link", "Date", "Source",
-    "Theme", "Point of Interest",
-    "Matching Keywords"
-  ]);
+  repo_ensureRawArticlesHeader_(sh);
 
   return sh;
 }
@@ -59,8 +55,71 @@ function repo_resetRawArticles_() {
 function repo_appendRawArticles_(rows) {
   if (!rows || !rows.length) return 0;
   const sh = repo_getOrCreateSheet_(repo_getRawSheetName_());
+  repo_ensureRawArticlesHeader_(sh);
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, 7).setValues(rows);
   return rows.length;
+}
+
+function repo_getRawArticleLinks_() {
+  const sh = repo_getOrCreateSheet_(repo_getRawSheetName_());
+  repo_ensureRawArticlesHeader_(sh);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  const values = sh.getRange(2, 2, lastRow - 1, 1).getValues();
+  return values.map(row => row[0]).filter(Boolean);
+}
+
+function repo_pruneRawArticlesByAge_(maxAgeDays) {
+  const sh = repo_getOrCreateSheet_(repo_getRawSheetName_());
+  repo_ensureRawArticlesHeader_(sh);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return { removed: 0, kept: 0 };
+
+  const days = Number(maxAgeDays);
+  if (!days || days <= 0) return { removed: 0, kept: lastRow - 1 };
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  const data = sh.getRange(2, 1, lastRow - 1, 7).getValues();
+  const kept = [];
+  let removed = 0;
+
+  data.forEach(row => {
+    const rawDate = row[2];
+    let keep = true;
+    if (rawDate) {
+      const parsed = new Date(rawDate);
+      if (!isNaN(parsed.getTime()) && parsed < cutoff) {
+        keep = false;
+      }
+    }
+    if (keep) {
+      kept.push(row);
+    } else {
+      removed++;
+    }
+  });
+
+  if (kept.length) {
+    sh.getRange(2, 1, kept.length, 7).setValues(kept);
+  }
+  const clearStart = 2 + kept.length;
+  if (clearStart <= lastRow) {
+    sh.getRange(clearStart, 1, lastRow - clearStart + 1, 7).clearContent();
+  }
+
+  return { removed: removed, kept: kept.length };
+}
+
+function repo_ensureRawArticlesHeader_(sh) {
+  const lastRow = sh.getLastRow();
+  if (lastRow >= 1) return;
+  sh.appendRow([
+    "Title", "Link", "Date", "Source",
+    "Theme", "Point of Interest",
+    "Matching Keywords"
+  ]);
 }
 
 // --- RSS FEEDS (A:Source B:URL C:Tags D:Notes E:Active) ---
