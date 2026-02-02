@@ -738,8 +738,19 @@ function safeFilename_(name) {
   return (cleaned.slice(0, 140) || "file");
 }
 
+function normalizeDriveFileId_(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!raw.includes("drive.google.com")) return raw;
+
+  const match =
+    raw.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+    raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : raw;
+}
+
 function getFsBannerFileId_() {
-  const id = String(FS_BANNER_FILE_ID || "").trim();
+  const id = normalizeDriveFileId_(FS_BANNER_FILE_ID);
   if (id && id !== "PASTE_BANNER_FILE_ID_HERE") {
     try {
       const file = DriveApp.getFileById(id);
@@ -750,7 +761,7 @@ function getFsBannerFileId_() {
     }
   }
 
-  const folderId = String(FS_BANNER_FOLDER_ID || "").trim();
+  const folderId = normalizeDriveFileId_(FS_BANNER_FOLDER_ID);
   if (!folderId || folderId === "PASTE_BANNER_FOLDER_ID_HERE") return "";
 
   try {
