@@ -15,6 +15,7 @@
  * - NO Base64
  * - NO BannerConfig.gs
  * - Banner is a Drive file (by ID) attached as CID "fs_banner"
+ * - Falls back to newest image in FS_BANNER_FOLDER_ID if ID is missing/invalid
  * - EmailTemplateBody.html should reference it as: <img src="cid:fs_banner" ...>
  ******************************/
 
@@ -736,6 +737,56 @@ function safeFilename_(name) {
     .replace(/\s+/g, " ")
     .trim();
   return (cleaned.slice(0, 140) || "file");
+}
+
+function getFsBannerFileId_() {
+  const id = String(FS_BANNER_FILE_ID || "").trim();
+  if (id && id !== "PASTE_BANNER_FILE_ID_HERE") {
+    try {
+      DriveApp.getFileById(id);
+      return id;
+    } catch (e) {
+      // fall through to folder lookup
+    }
+  }
+
+  const folderId = String(FS_BANNER_FOLDER_ID || "").trim();
+  if (!folderId || folderId === "PASTE_BANNER_FOLDER_ID_HERE") return "";
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    const files = folder.getFiles();
+    let newest = null;
+    let newestTime = 0;
+
+    while (files.hasNext()) {
+      const file = files.next();
+      const mime = String(file.getMimeType() || "").toLowerCase();
+      if (!mime.startsWith("image/")) continue;
+
+      const updated = file.getLastUpdated();
+      const updatedTime = updated ? updated.getTime() : 0;
+      if (!newest || updatedTime > newestTime) {
+        newest = file;
+        newestTime = updatedTime;
+      }
+    }
+
+    return newest ? newest.getId() : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function getFsBannerBlob_() {
+  const bannerId = getFsBannerFileId_();
+  if (!bannerId) return null;
+
+  try {
+    return DriveApp.getFileById(bannerId);
+  } catch (e) {
+    return null;
+  }
 }
 
 function tryFetchImageBlobSafe_(url) {
