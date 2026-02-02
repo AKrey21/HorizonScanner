@@ -15,6 +15,8 @@
  * - NO Base64
  * - NO BannerConfig.gs
  * - Banner is a Drive file (by ID) attached as CID "fs_banner"
+ * - Falls back to newest image in FS_BANNER_FOLDER_ID if ID is missing/invalid
+ * - Resolves Drive shortcuts and can use thumbnails for non-image Drive types
  * - EmailTemplateBody.html should reference it as: <img src="cid:fs_banner" ...>
  ******************************/
 
@@ -210,10 +212,8 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   // ---- Banner (Drive asset → CID) ----
   // Always attach banner, and force JPG mime so Outlook renders it reliably.
   try {
-    const bannerBlobSource = getFsBannerBlob_();
-    if (!bannerBlobSource) throw new Error("No banner file found.");
-
-    let bannerBlob = bannerBlobSource.getBlob();
+    let bannerBlob = getFsBannerBlob_();
+    if (!bannerBlob) throw new Error("No banner file found.");
     // Force correct metadata (Drive sometimes returns application/octet-stream)
     bannerBlob = bannerBlob
       .setName("fs_banner.jpg")
@@ -736,6 +736,89 @@ function safeFilename_(name) {
     .replace(/\s+/g, " ")
     .trim();
   return (cleaned.slice(0, 140) || "file");
+}
+
+function getFsBannerFileId_() {
+  const id = String(FS_BANNER_FILE_ID || "").trim();
+  if (id && id !== "PASTE_BANNER_FILE_ID_HERE") {
+    try {
+      const file = DriveApp.getFileById(id);
+      const resolved = resolveBannerFile_(file);
+      if (resolved) return resolved.getId();
+    } catch (e) {
+      // fall through to folder lookup
+    }
+  }
+
+  const folderId = String(FS_BANNER_FOLDER_ID || "").trim();
+  if (!folderId || folderId === "PASTE_BANNER_FOLDER_ID_HERE") return "";
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    const files = folder.getFiles();
+    let newest = null;
+    let newestTime = 0;
+
+    while (files.hasNext()) {
+      const file = files.next();
+      const resolved = resolveBannerFile_(file);
+      if (!resolved) continue;
+
+      const updated = resolved.getLastUpdated();
+      const updatedTime = updated ? updated.getTime() : 0;
+      if (!newest || updatedTime > newestTime) {
+        newest = resolved;
+        newestTime = updatedTime;
+      }
+    }
+
+    return newest ? newest.getId() : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function getFsBannerBlob_() {
+  const bannerId = getFsBannerFileId_();
+  if (!bannerId) return null;
+
+  try {
+    const file = DriveApp.getFileById(bannerId);
+    const resolved = resolveBannerFile_(file);
+    if (!resolved) return null;
+
+    const mime = String(resolved.getMimeType() || "").toLowerCase();
+    if (mime.startsWith("image/")) return resolved.getBlob();
+
+    if (typeof resolved.getThumbnail === "function") {
+      const thumb = resolved.getThumbnail();
+      if (thumb) {
+        return thumb.setName("fs_banner.jpg").setContentType("image/jpeg");
+      }
+    }
+  } catch (e) {
+    return null;
+  }
+
+  return null;
+}
+
+function resolveBannerFile_(file) {
+  if (!file) return null;
+
+  const mime = String(file.getMimeType() || "").toLowerCase();
+  if (mime.startsWith("image/")) return file;
+
+  if (mime === "application/vnd.google-apps.shortcut" && typeof file.getTargetId === "function") {
+    try {
+      const target = DriveApp.getFileById(file.getTargetId());
+      return resolveBannerFile_(target);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return file;
 }
 
 function tryFetchImageBlobSafe_(url) {
