@@ -35,15 +35,32 @@
 
     .btn, select, input[type="date"], input[type="text"]{
       border-radius:999px; border:1px solid var(--fs-border);
-      background: var(--fs-surface);
+      background: rgba(6,20,50,.75);
       color:var(--fs-text);
       padding:10px 12px; font-size:12px;
+    }
+    select option{
+      background: #0c1f4a;
+      color: var(--fs-text);
+    }
+    input::placeholder{ color: var(--fs-muted-weak); }
+    select:focus, input[type="date"]:focus, input[type="text"]:focus{
+      outline:2px solid rgba(255,115,0,.35);
+      outline-offset:1px;
     }
     .btn{ cursor:pointer; }
     .btn.primary{
       border-color: var(--fs-accent);
       background: var(--fs-accent);
       color: #1b1b1b;
+    }
+    .btn:not(.primary){
+      background: rgba(0,42,123,.55);
+      border-color: rgba(229,238,251,.28);
+      color: var(--fs-text);
+    }
+    .btn:not(.primary):hover{
+      background: rgba(0,42,123,.7);
     }
     .btn.ghost{ background: transparent; }
     .btn.mini{ padding:8px 10px; }
