@@ -761,13 +761,13 @@ function getFsBannerFileId_() {
 
     while (files.hasNext()) {
       const file = files.next();
-      const mime = String(file.getMimeType() || "").toLowerCase();
-      if (!mime.startsWith("image/")) continue;
+      const resolved = resolveBannerFile_(file);
+      if (!resolved) continue;
 
-      const updated = file.getLastUpdated();
+      const updated = resolved.getLastUpdated();
       const updatedTime = updated ? updated.getTime() : 0;
       if (!newest || updatedTime > newestTime) {
-        newest = file;
+        newest = resolved;
         newestTime = updatedTime;
       }
     }
@@ -787,6 +787,25 @@ function getFsBannerBlob_() {
   } catch (e) {
     return null;
   }
+}
+
+function resolveBannerFile_(file) {
+  if (!file) return null;
+
+  const mime = String(file.getMimeType() || "").toLowerCase();
+  if (mime.startsWith("image/")) return file;
+
+  if (mime === "application/vnd.google-apps.shortcut" && typeof file.getTargetId === "function") {
+    try {
+      const target = DriveApp.getFileById(file.getTargetId());
+      const targetMime = String(target.getMimeType() || "").toLowerCase();
+      if (targetMime.startsWith("image/")) return target;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 function tryFetchImageBlobSafe_(url) {
