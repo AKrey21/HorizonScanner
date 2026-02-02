@@ -11,6 +11,8 @@
       --fs-accent:#FF7300;
       --fs-accent-soft:rgba(255,115,0,.18);
       --fs-primary-soft:rgba(0,42,123,.08);
+      --fs-header-bg:#002A7B;
+      --fs-header-text:#E5EEFB;
       height:100%;
       min-height:0;
       display:flex;
@@ -38,7 +40,11 @@
       padding:10px 12px; font-size:12px;
     }
     .btn{ cursor:pointer; }
-    .btn.primary{ border-color: var(--fs-accent); background: var(--fs-accent-soft); }
+    .btn.primary{
+      border-color: var(--fs-text);
+      background: var(--fs-text);
+      color: var(--fs-header-text);
+    }
     .btn.ghost{ background: transparent; }
     .btn.mini{ padding:8px 10px; }
     .btn:disabled{ opacity:.55; cursor:not-allowed; }
@@ -165,8 +171,8 @@
 
     thead th{
       position:sticky; top:0; z-index:2;
-      background: var(--fs-bg);
-      color:var(--fs-muted); font-weight:600;
+      background: var(--fs-header-bg);
+      color:var(--fs-header-text); font-weight:600;
       border-bottom:1px solid var(--fs-border);
       padding:10px;
       text-align:left;
