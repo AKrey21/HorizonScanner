@@ -943,3 +943,68 @@ function ui_addRssFeed() {
     return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };
   }
 }
+
+/**
+ * CREATE RSS feeds from a homepage URL
+ * payload: { url: "https://site.com", sourceName?: "BBC" }
+ */
+function ui_createRssFeedFromUrl(payload) {
+  try {
+    payload = payload || {};
+    const url = String(payload.url || "").trim();
+    if (!url) return { ok: false, message: "Missing URL." };
+
+    const providedSource = String(payload.sourceName || "").trim();
+
+    const ss = rss_getSpreadsheetSafe_();
+    const sheetName = rss_getRssFeedsSheetName_();
+    const feedsSh = ss.getSheetByName(sheetName);
+    if (!feedsSh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
+
+    const existing = loadExistingFeedUrls_(feedsSh);
+
+    let html;
+    try {
+      html = fetchHtml_(url);
+    } catch (e) {
+      return { ok: false, message: `Homepage fetch failed: ${e.message || e}` };
+    }
+
+    const candidates = extractFeedCandidatesFromHtml_(url, html);
+
+    let geminiSuggestions = [];
+    try {
+      geminiSuggestions = geminiSuggestFeeds_(url, html, candidates);
+    } catch (e) {
+      geminiSuggestions = [];
+    }
+
+    const combined = dedupeList_([].concat(candidates, geminiSuggestions));
+
+    let finalFeeds = combined;
+    if (typeof VERIFY_FEED_FETCH !== "undefined" && VERIFY_FEED_FETCH) {
+      finalFeeds = combined
+        .filter(u => looksLikeFeedUrl_(u))
+        .filter(u => verifyFeedUrl_(u));
+    } else {
+      finalFeeds = combined.filter(u => looksLikeFeedUrl_(u));
+    }
+
+    if (!finalFeeds.length) {
+      finalFeeds = [buildGoogleNewsSiteRss_(url)];
+    }
+
+    const sourceName = providedSource || deriveSourceName_(url);
+    const added = appendFeeds_(feedsSh, finalFeeds, existing, sourceName, "");
+
+    return {
+      ok: true,
+      addedCount: added.length,
+      added,
+      feeds: finalFeeds,
+      sourceName
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };
+  }
+}
