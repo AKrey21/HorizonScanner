@@ -142,7 +142,6 @@ function generateWeeklyPicks_Scored() {
   let scopeMiss = 0;
   let skippedMinScore = 0;
 
-  const out = [];
   const allScored = [];
 
   for (const r of rawVals) {
@@ -196,10 +195,6 @@ function generateWeeklyPicks_Scored() {
     };
 
     allScored.push(row);
-
-    if (finalScore < params.minScore) { skippedMinScore++; continue; }
-
-    out.push(row);
   }
 
   const rankedAll = allScored.sort((a, b) => {
@@ -207,10 +202,18 @@ function generateWeeklyPicks_Scored() {
     return String(b.date).localeCompare(String(a.date));
   });
 
-  const rankedPassing = out.sort((a, b) => {
+  const percentileCutoffScore = sc_getPercentileScore_(rankedAll, params);
+  const effectiveMinScore = params.usePercentileCutoff ? percentileCutoffScore : params.minScore;
+
+  const rankedPassing = rankedAll.filter(r => {
+    if (r.score < effectiveMinScore) return false;
+    return true;
+  }).sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return String(b.date).localeCompare(String(a.date));
   });
+
+  skippedMinScore = rankedAll.length - rankedPassing.length;
 
   const targetMin = Math.min(params.minPicks || 0, params.topN || 0);
   let candidates = rankedPassing.slice();
@@ -235,7 +238,9 @@ function generateWeeklyPicks_Scored() {
   const summary =
     `Weekly Picks updated: ${finalRows.length} rows | ` +
     `seen=${seen}, empty=${skippedEmpty}, recency_excl=${skippedRecency}, ` +
-    `scope_miss=${scopeMiss}, minScore_excl=${skippedMinScore}` +
+    `scope_miss=${scopeMiss}, scored=${rankedAll.length}, passing=${rankedPassing.length}, ` +
+    `minScore_excl=${skippedMinScore}` +
+    (params.usePercentileCutoff ? `, top_percentile=${params.percentileCutoff}, percentile_score=${percentileCutoffScore}` : "") +
     (fallbackAdded ? `, fallback_added=${fallbackAdded}` : "");
 
   Logger.log(summary);
@@ -275,6 +280,8 @@ function sc_defaultConfig_() {
     topN: 15,
     minScore: 6,
     minPicks: 5,
+    usePercentileCutoff: false,
+    percentileCutoff: 0.2,
     recencyDays: 365,
     capPerTheme: 3,
     capPerPOI: 3,
@@ -394,7 +401,7 @@ function sc_defaultConfig_() {
       productHype: 1
     },
 
-    notes: "v1.4-no-archive: removed archive/profile; kept learnability soft + baseline AI config gen."
+    notes: "v1.4-no-archive: removed archive/profile; kept learnability soft + baseline AI config gen; added optional top-percentile cutoff."
   };
 }
 
@@ -425,6 +432,8 @@ function sc_readParams_(cfg) {
     topN: sc_int_(p.topN, 15, 1, 100),
     minScore: sc_int_(p.minScore, 6, 0, 9999),
     minPicks: sc_int_(p.minPicks, 5, 0, sc_int_(p.topN, 15, 1, 100)),
+    usePercentileCutoff: (typeof p.usePercentileCutoff === "boolean") ? p.usePercentileCutoff : false,
+    percentileCutoff: sc_num_(p.percentileCutoff, 0.2, 0, 1),
     recencyDays: sc_int_(p.recencyDays, 365, 0, 3650),
     capPerTheme: sc_int_(p.capPerTheme, 3, 1, 999),
     capPerPOI: sc_int_(p.capPerPOI, 3, 1, 999),
@@ -704,6 +713,15 @@ function sc_fmtDate_(v) {
     return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
   }
   return String(v);
+}
+
+function sc_getPercentileScore_(rankedAll, params) {
+  if (!params.usePercentileCutoff) return 0;
+  const list = Array.isArray(rankedAll) ? rankedAll : [];
+  if (!list.length) return 0;
+  const p = sc_num_(params.percentileCutoff, 0.2, 0, 1);
+  const idx = Math.max(0, Math.min(list.length - 1, Math.floor((list.length - 1) * p)));
+  return Number(list[idx].score || 0);
 }
 
 function sc_withinDays_(dateVal, days) {
