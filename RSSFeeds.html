@@ -384,14 +384,34 @@
     const newUrl = (F("feeds-newUrl")?.value || "").trim();
     const newSource = (F("feeds-newSource")?.value || "").trim();
     if (newUrl) {
-      feedsState.pendingUrl = newUrl;
-      feedsState.pendingSource = newSource;
-      feedsState.pendingSearch = newUrl;
       F("feeds-newUrl").value = "";
       F("feeds-newSource").value = "";
+      feeds_notice("busy", "✨ Discovering RSS feeds…");
+      google.script.run
+        .withSuccessHandler(res => {
+          if (btn) btn.disabled = false;
+          if (!res || !res.ok) {
+            feeds_notice("err", "❌ Create failed: " + (res?.message || "No response"));
+            return;
+          }
+          const addedCount = res.addedCount || 0;
+          const sourceName = res.sourceName || newSource || newUrl;
+          feeds_notice("ok", addedCount
+            ? `✅ Added ${addedCount} feed(s) for ${sourceName}.`
+            : "ℹ️ No new feeds added (already existed).");
+          F("feeds-q").value = sourceName;
+          feeds_reload(true);
+        })
+        .withFailureHandler(err => {
+          if (btn) btn.disabled = false;
+          const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
+          feeds_notice("err", "❌ Create error: " + msg);
+        })
+        .ui_createRssFeedFromUrl({ url: newUrl, sourceName: newSource });
+      return;
     }
-    feeds_notice("busy", newUrl ? "✨ Creating RSS feed row…" : "➕ Adding new feed row…");
 
+    feeds_notice("busy", "➕ Adding new feed row…");
     google.script.run
       .withSuccessHandler(res => {
         if (btn) btn.disabled = false;
