@@ -208,7 +208,7 @@
     feeds_reload(true);
   };
 
-  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0, pendingUrl: "", pendingSource: "" };
+  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0, pendingUrl: "", pendingSource: "", pendingSearch: "" };
 
   const F = (id) => document.getElementById(id);
 
@@ -325,6 +325,7 @@
             if (sourceField) sourceField.value = feedsState.pendingSource || deriveSourceFromUrl(feedsState.pendingUrl);
             feedsState.pendingUrl = "";
             feedsState.pendingSource = "";
+            feedsState.pendingSearch = "";
             feeds_notice("ok", "✅ Added. Review the generated RSS URL and click Save.");
             showPendingNotice = true;
           }
@@ -385,6 +386,7 @@
     if (newUrl) {
       feedsState.pendingUrl = newUrl;
       feedsState.pendingSource = newSource;
+      feedsState.pendingSearch = newUrl;
       F("feeds-newUrl").value = "";
       F("feeds-newSource").value = "";
     }
@@ -398,6 +400,9 @@
           return;
         }
         feeds_notice("ok", "✅ New feed row added.");
+        if (feedsState.pendingSearch) {
+          F("feeds-q").value = feedsState.pendingSearch;
+        }
         feeds_reload(true);
       })
       .withFailureHandler(err => {
