@@ -725,6 +725,29 @@ function rss_buildFeedColumnMap_(header) {
   };
 }
 
+function rss_guessFeedColumnMap_(rowValues, totalCols) {
+  const cols = Math.max(4, Number(totalCols) || 0);
+  const values = rowValues || [];
+  const looksLikeUrl = (val) => /^https?:\/\//i.test(String(val || "").trim());
+  const looksLikeBool = (val) => {
+    if (val === true || val === false) return true;
+    const s = String(val || "").trim().toLowerCase();
+    return s === "true" || s === "false";
+  };
+
+  if (looksLikeUrl(values[0]) && looksLikeBool(values[1])) {
+    return {
+      url: 1,
+      active: 2,
+      source: cols >= 3 ? 3 : undefined,
+      notes: cols >= 4 ? 4 : undefined,
+      tags: cols >= 5 ? 5 : undefined
+    };
+  }
+
+  return null;
+}
+
 function rss_getFeedColumnMap_(sh, startRow) {
   const headerRow = rss_getFeedsHeaderRow_(startRow);
   const lastCol = Math.max(5, sh.getLastColumn());
@@ -744,6 +767,9 @@ function rss_getFeedColumnMap_(sh, startRow) {
   }
 
   if (!best.matches) {
+    const sampleRow = sh.getRange(startRow, 1, 1, lastCol).getValues()[0] || [];
+    const guessed = rss_guessFeedColumnMap_(sampleRow, lastCol);
+    if (guessed) return guessed;
     return {
       source: 1,
       url: 2,
@@ -938,6 +964,75 @@ function ui_addRssFeed() {
     return {
       ok: true,
       row: { rowIndex: newRow, source: "", url: "", tags: "", notes: "", active: true }
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };
+  }
+}
+
+/**
+ * CREATE RSS feeds from a homepage URL
+ * payload: { url: "https://site.com", sourceName?: "BBC" }
+ */
+function ui_createRssFeedFromUrl(payload) {
+  try {
+    payload = payload || {};
+    const url = String(payload.url || "").trim();
+    if (!url) return { ok: false, message: "Missing URL." };
+
+    const providedSource = String(payload.sourceName || "").trim();
+
+    const ss = rss_getSpreadsheetSafe_();
+    const sheetName = rss_getRssFeedsSheetName_();
+    const feedsSh = ss.getSheetByName(sheetName);
+    if (!feedsSh) return { ok: false, message: `Sheet not found: "${sheetName}"` };
+
+    const existing = loadExistingFeedUrls_(feedsSh);
+
+    let html = "";
+    let warning = "";
+    try {
+      html = fetchHtml_(url);
+    } catch (e) {
+      warning = `Homepage fetch failed (${e.message || e}). Using Google News fallback.`;
+    }
+
+    let finalFeeds = [];
+    if (html) {
+      const candidates = extractFeedCandidatesFromHtml_(url, html);
+
+      let geminiSuggestions = [];
+      try {
+        geminiSuggestions = geminiSuggestFeeds_(url, html, candidates);
+      } catch (e) {
+        geminiSuggestions = [];
+      }
+
+      const combined = dedupeList_([].concat(candidates, geminiSuggestions));
+
+      if (typeof VERIFY_FEED_FETCH !== "undefined" && VERIFY_FEED_FETCH) {
+        finalFeeds = combined
+          .filter(u => looksLikeFeedUrl_(u))
+          .filter(u => verifyFeedUrl_(u));
+      } else {
+        finalFeeds = combined.filter(u => looksLikeFeedUrl_(u));
+      }
+    }
+
+    if (!finalFeeds.length) {
+      finalFeeds = [buildGoogleNewsSiteRss_(url)];
+    }
+
+    const sourceName = providedSource || deriveSourceName_(url);
+    const added = appendFeeds_(feedsSh, finalFeeds, existing, sourceName, "");
+
+    return {
+      ok: true,
+      addedCount: added.length,
+      added,
+      feeds: finalFeeds,
+      sourceName,
+      warning
     };
   } catch (err) {
     return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };
