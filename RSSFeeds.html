@@ -23,7 +23,7 @@
 
     .meta{ color:#a7afc0; font-size:12px; margin-bottom:8px; }
 
-    .wrap{ border:1px solid rgba(255,255,255,.08); border-radius:14px; overflow:auto; max-height:72vh; }
+    .wrap{ border:1px solid rgba(255,255,255,.08); border-radius:16px; overflow:auto; max-height:72vh; box-shadow:0 16px 40px rgba(0,0,0,.25); }
     table{ width:100%; border-collapse:collapse; font-size:12px; min-width:900px; }
     thead th{
       position:sticky; top:0; z-index:2;
@@ -36,6 +36,26 @@
     }
     tbody td{ border-bottom:1px solid rgba(255,255,255,.06); padding:10px; vertical-align:top; }
     tbody tr:nth-child(2n) td{ background: rgba(255,255,255,.02); }
+    tbody tr.group-row td{
+      background: rgba(122,162,255,.12);
+      color:#e8eaf0;
+      font-weight:600;
+      border-bottom:1px solid rgba(122,162,255,.30);
+      position:sticky;
+      top:32px;
+      z-index:1;
+    }
+    .group-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .group-title small{
+      color:#c9d1e3;
+      font-weight:500;
+      opacity:.85;
+    }
 
     input[type="text"], input[type="url"]{
       width:100%;
@@ -46,6 +66,10 @@
       padding:8px 10px;
       font-size:12px;
       outline:none;
+    }
+    input[type="text"]:focus, input[type="url"]:focus{
+      border-color: rgba(122,162,255,.45);
+      box-shadow:0 0 0 2px rgba(122,162,255,.20);
     }
 
     a{ color:#7aa2ff; text-decoration:none; word-break:break-all; }
@@ -76,6 +100,46 @@
     .notice.ok{  border-color: rgba(122,255,170,.30); background: rgba(122,255,170,.10); }
     .notice.err{ border-color: rgba(255,120,120,.35); background: rgba(255,120,120,.12); }
     .notice.busy{border-color: rgba(122,162,255,.35); background: rgba(122,162,255,.10); }
+    .source-badge{
+      padding:2px 8px;
+      border-radius:999px;
+      background: rgba(17,21,34,.55);
+      border:1px solid rgba(255,255,255,.12);
+      font-size:11px;
+      color:#dfe6fb;
+    }
+    .helper{
+      margin-left:6px;
+      color:#a7afc0;
+      font-size:11px;
+    }
+    .create-bar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      padding:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      border-radius:14px;
+      margin-bottom:10px;
+    }
+    .create-bar label{
+      font-size:12px;
+      color:#c9d1e3;
+      font-weight:600;
+    }
+    .create-bar .field{
+      flex:1;
+      min-width:220px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .create-bar .hint{
+      color:#a7afc0;
+      font-size:11px;
+    }
   </style>
 
   <div class="controls">
@@ -95,8 +159,21 @@
     <button class="btn primary" onclick="feeds_reload(true)">Search</button>
     <button class="btn" onclick="feeds_clear()">Clear</button>
 
-    <button class="btn primary" id="feeds-addBtn" onclick="feeds_add()">Add Feed</button>
+    <button class="btn primary" id="feeds-addBtn" onclick="feeds_add()">Create RSS Feed</button>
     <button class="btn" id="feeds-saveBtn" onclick="feeds_save()">Save</button>
+  </div>
+
+  <div class="create-bar">
+    <div class="field">
+      <label for="feeds-newUrl">Site URL to convert into RSS</label>
+      <input id="feeds-newUrl" type="url" placeholder="https://www.bbc.com/news">
+      <div class="hint">Paste any site link here. Click “Create RSS Feed” and the AI will generate the RSS endpoint.</div>
+    </div>
+    <div class="field" style="max-width:220px;">
+      <label for="feeds-newSource">Optional source name</label>
+      <input id="feeds-newSource" type="text" placeholder="BBC">
+      <div class="hint">We’ll auto-fill this from the URL if left blank.</div>
+    </div>
   </div>
 
   <div class="meta" id="feeds-meta">Loading…</div>
@@ -180,25 +257,58 @@
 
         const maxPage = Math.max(1, Math.ceil((feedsState.totalMatches||0) / feedsState.pageSize));
         F("feeds-pageInfo").textContent = `Page ${res.page} / ${maxPage}`;
+        const uniqueSources = new Set((res.rows || []).map(r => (r.source || "").trim()).filter(Boolean));
         F("feeds-meta").textContent =
-          `Sheet: ${res.sheet} • Total rows: ${res.totalRows} • Matches: ${res.totalMatches}`;
+          `Sheet: ${res.sheet} • Total rows: ${res.totalRows} • Matches: ${res.totalMatches} • Sources: ${uniqueSources.size}`;
         F("feeds-showing").textContent = `Showing: ${(res.rows || []).length}`;
         F("feeds-prev").disabled = (res.page <= 1);
         F("feeds-next").disabled = (res.page >= maxPage);
 
-        F("feeds-tbody").innerHTML = (res.rows || []).map(r => {
+        const groupedRows = (res.rows || []).slice().sort((a, b) => {
+          const aSource = (a.source || "").toLowerCase();
+          const bSource = (b.source || "").toLowerCase();
+          if (aSource === bSource) return (a.url || "").localeCompare(b.url || "");
+          return aSource.localeCompare(bSource);
+        });
+        const countsBySource = groupedRows.reduce((acc, row) => {
+          const key = (row.source || "").trim() || "Uncategorized";
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {});
+
+        let currentSource = null;
+        F("feeds-tbody").innerHTML = groupedRows.map(r => {
+          const source = (r.source || "").trim() || "Uncategorized";
           const urlPreview = r.url ? `<div style="margin-top:6px;"><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Open</a></div>` : "";
+          const groupHeader = source !== currentSource ? `
+            <tr class="group-row">
+              <td colspan="5">
+                <div class="group-title">
+                  <span>${esc(source)}</span>
+                  <small>${countsBySource[source] || 0} feed(s)</small>
+                </div>
+              </td>
+            </tr>
+          ` : "";
+          currentSource = source;
           return `
+            ${groupHeader}
             <tr data-row="${r.rowIndex}">
-              <td><input type="text" value="${esc(r.source)}" data-k="source"></td>
               <td>
-                <input type="url" value="${esc(r.url)}" data-k="url">
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <input type="text" value="${esc(r.source)}" data-k="source" placeholder="Source name (e.g. BBC)">
+                  <span class="source-badge">${esc(source)}</span>
+                </div>
+              </td>
+              <td>
+                <input type="url" value="${esc(r.url)}" data-k="url" placeholder="https://example.com/rss.xml">
                 ${urlPreview}
               </td>
-              <td><input type="text" value="${esc(r.tags)}" data-k="tags"></td>
-              <td><input type="text" value="${esc(r.notes)}" data-k="notes"></td>
+              <td><input type="text" value="${esc(r.tags)}" data-k="tags" placeholder="e.g. politics, tech"></td>
+              <td><input type="text" value="${esc(r.notes)}" data-k="notes" placeholder="Optional notes"></td>
               <td style="text-align:center;">
                 <input type="checkbox" ${r.active ? "checked" : ""} data-k="active">
+                <span class="helper">${r.active ? "On" : "Off"}</span>
               </td>
             </tr>
           `;
@@ -220,7 +330,7 @@
     feeds_notice("busy", "💾 Saving…");
 
     const edits = [];
-    F("feeds-tbody").querySelectorAll("tr").forEach(tr => {
+    F("feeds-tbody").querySelectorAll("tr[data-row]").forEach(tr => {
       const rowIndex = Number(tr.getAttribute("data-row"));
       const get = (k) => tr.querySelector(`[data-k="${k}"]`);
       edits.push({
@@ -254,8 +364,39 @@
   function feeds_add(){
     const btn = F("feeds-addBtn");
     if (btn) btn.disabled = true;
-    feeds_notice("busy", "➕ Adding new feed row…");
+    const newUrl = (F("feeds-newUrl")?.value || "").trim();
+    const newSource = (F("feeds-newSource")?.value || "").trim();
+    if (newUrl) {
+      F("feeds-newUrl").value = "";
+      F("feeds-newSource").value = "";
+      feeds_notice("busy", "✨ Discovering RSS feeds…");
+      google.script.run
+        .withSuccessHandler(res => {
+          if (btn) btn.disabled = false;
+          if (!res || !res.ok) {
+            feeds_notice("err", "❌ Create failed: " + (res?.message || "No response"));
+            return;
+          }
+          const addedCount = res.addedCount || 0;
+          const sourceName = res.sourceName || newSource || newUrl;
+          const warning = res.warning || "";
+          const baseMsg = addedCount
+            ? `✅ Added ${addedCount} feed(s) for ${sourceName}.`
+            : "ℹ️ No new feeds added (already existed).";
+          feeds_notice(warning ? "err" : "ok", warning ? `${baseMsg}\n${warning}` : baseMsg);
+          F("feeds-q").value = sourceName;
+          feeds_reload(true);
+        })
+        .withFailureHandler(err => {
+          if (btn) btn.disabled = false;
+          const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
+          feeds_notice("err", "❌ Create error: " + msg);
+        })
+        .ui_createRssFeedFromUrl({ url: newUrl, sourceName: newSource });
+      return;
+    }
 
+    feeds_notice("busy", "➕ Adding new feed row…");
     google.script.run
       .withSuccessHandler(res => {
         if (btn) btn.disabled = false;
