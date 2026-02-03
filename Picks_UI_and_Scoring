@@ -37,13 +37,17 @@ function getSpreadsheet_() {
  * 1) UI — Config JSON
  * ========================================================= */
 function ui_getScoringConfig_v1() {
-  const kv = readKeyValueSheet_(SCORING_CONFIG_SHEET);
-  const raw = kv[CFG_SHEET_KEY_JSON];
+  try {
+    const kv = readKeyValueSheet_(SCORING_CONFIG_SHEET);
+    const raw = kv[CFG_SHEET_KEY_JSON];
 
-  const prop = PropertiesService.getScriptProperties().getProperty("SCORING_CONFIG_JSON");
+    const prop = PropertiesService.getScriptProperties().getProperty("SCORING_CONFIG_JSON");
 
-  if (raw) return { jsonText: String(raw) };
-  if (prop) return { jsonText: String(prop) };
+    if (raw) return { jsonText: String(raw) };
+    if (prop) return { jsonText: String(prop) };
+  } catch (e) {
+    Logger.log("ui_getScoringConfig_v1 failed, using defaults: " + e);
+  }
 
   const starter = sc_defaultConfig_();
   return { jsonText: JSON.stringify(starter, null, 2) };
