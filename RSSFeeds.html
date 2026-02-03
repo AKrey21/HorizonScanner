@@ -208,7 +208,7 @@
     feeds_reload(true);
   };
 
-  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0 };
+  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0, pendingUrl: "", pendingSource: "", pendingSearch: "" };
 
   const F = (id) => document.getElementById(id);
 
@@ -315,7 +315,24 @@
         }).join("");
 
         F("feeds-lastRefresh").textContent = new Date().toLocaleTimeString();
-        feeds_noticeClear();
+        let showPendingNotice = false;
+        if (feedsState.pendingUrl) {
+          const firstRow = F("feeds-tbody").querySelector("tr[data-row]");
+          if (firstRow) {
+            const urlField = firstRow.querySelector('[data-k="url"]');
+            const sourceField = firstRow.querySelector('[data-k="source"]');
+            if (urlField) urlField.value = feedsState.pendingUrl;
+            if (sourceField) sourceField.value = feedsState.pendingSource || deriveSourceFromUrl(feedsState.pendingUrl);
+            feedsState.pendingUrl = "";
+            feedsState.pendingSource = "";
+            feedsState.pendingSearch = "";
+            feeds_notice("ok", "✅ Added. Review the generated RSS URL and click Save.");
+            showPendingNotice = true;
+          }
+        }
+        if (!showPendingNotice) {
+          feeds_noticeClear();
+        }
       })
       .withFailureHandler(err => {
         const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
@@ -403,6 +420,9 @@
           return;
         }
         feeds_notice("ok", "✅ New feed row added.");
+        if (feedsState.pendingSearch) {
+          F("feeds-q").value = feedsState.pendingSearch;
+        }
         feeds_reload(true);
       })
       .withFailureHandler(err => {
@@ -420,6 +440,16 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+
+  function deriveSourceFromUrl(url){
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      const name = host.split(".")[0] || host;
+      return name ? name.charAt(0).toUpperCase() + name.slice(1) : "";
+    } catch (e) {
+      return "";
+    }
   }
 
   document.addEventListener("keydown", (e) => {
