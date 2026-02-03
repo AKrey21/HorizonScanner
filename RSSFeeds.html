@@ -132,8 +132,12 @@
     <button class="btn primary" onclick="feeds_reload(true)">Search</button>
     <button class="btn" onclick="feeds_clear()">Clear</button>
 
-    <button class="btn primary" id="feeds-addBtn" onclick="feeds_add()">Add Feed</button>
+    <button class="btn primary" id="feeds-addBtn" onclick="feeds_add()">Create RSS Feed</button>
     <button class="btn" id="feeds-saveBtn" onclick="feeds_save()">Save</button>
+  </div>
+
+  <div class="meta">
+    To create a feed: paste any site URL into “Feed URL”, click <strong>Create RSS Feed</strong>, and the AI will generate the RSS endpoint to extract from.
   </div>
 
   <div class="meta" id="feeds-meta">Loading…</div>
