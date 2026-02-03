@@ -238,7 +238,8 @@ function generateWeeklyPicks_Scored() {
   const summary =
     `Weekly Picks updated: ${finalRows.length} rows | ` +
     `seen=${seen}, empty=${skippedEmpty}, recency_excl=${skippedRecency}, ` +
-    `scope_miss=${scopeMiss}, minScore_excl=${skippedMinScore}` +
+    `scope_miss=${scopeMiss}, scored=${rankedAll.length}, passing=${rankedPassing.length}, ` +
+    `minScore_excl=${skippedMinScore}` +
     (params.usePercentileCutoff ? `, top_percentile=${params.percentileCutoff}, percentile_score=${percentileCutoffScore}` : "") +
     (fallbackAdded ? `, fallback_added=${fallbackAdded}` : "");
 
