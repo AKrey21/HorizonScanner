@@ -725,6 +725,29 @@ function rss_buildFeedColumnMap_(header) {
   };
 }
 
+function rss_guessFeedColumnMap_(rowValues, totalCols) {
+  const cols = Math.max(4, Number(totalCols) || 0);
+  const values = rowValues || [];
+  const looksLikeUrl = (val) => /^https?:\/\//i.test(String(val || "").trim());
+  const looksLikeBool = (val) => {
+    if (val === true || val === false) return true;
+    const s = String(val || "").trim().toLowerCase();
+    return s === "true" || s === "false";
+  };
+
+  if (looksLikeUrl(values[0]) && looksLikeBool(values[1])) {
+    return {
+      url: 1,
+      active: 2,
+      source: cols >= 3 ? 3 : undefined,
+      notes: cols >= 4 ? 4 : undefined,
+      tags: cols >= 5 ? 5 : undefined
+    };
+  }
+
+  return null;
+}
+
 function rss_getFeedColumnMap_(sh, startRow) {
   const headerRow = rss_getFeedsHeaderRow_(startRow);
   const lastCol = Math.max(5, sh.getLastColumn());
@@ -744,6 +767,9 @@ function rss_getFeedColumnMap_(sh, startRow) {
   }
 
   if (!best.matches) {
+    const sampleRow = sh.getRange(startRow, 1, 1, lastCol).getValues()[0] || [];
+    const guessed = rss_guessFeedColumnMap_(sampleRow, lastCol);
+    if (guessed) return guessed;
     return {
       source: 1,
       url: 2,
