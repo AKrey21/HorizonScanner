@@ -113,6 +113,33 @@
       color:#a7afc0;
       font-size:11px;
     }
+    .create-bar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      padding:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      border-radius:14px;
+      margin-bottom:10px;
+    }
+    .create-bar label{
+      font-size:12px;
+      color:#c9d1e3;
+      font-weight:600;
+    }
+    .create-bar .field{
+      flex:1;
+      min-width:220px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .create-bar .hint{
+      color:#a7afc0;
+      font-size:11px;
+    }
   </style>
 
   <div class="controls">
@@ -136,8 +163,17 @@
     <button class="btn" id="feeds-saveBtn" onclick="feeds_save()">Save</button>
   </div>
 
-  <div class="meta">
-    To create a feed: paste any site URL into “Feed URL”, click <strong>Create RSS Feed</strong>, and the AI will generate the RSS endpoint to extract from.
+  <div class="create-bar">
+    <div class="field">
+      <label for="feeds-newUrl">Site URL to convert into RSS</label>
+      <input id="feeds-newUrl" type="url" placeholder="https://www.bbc.com/news">
+      <div class="hint">Paste any site link here. Click “Create RSS Feed” and the AI will generate the RSS endpoint.</div>
+    </div>
+    <div class="field" style="max-width:220px;">
+      <label for="feeds-newSource">Optional source name</label>
+      <input id="feeds-newSource" type="text" placeholder="BBC">
+      <div class="hint">We’ll auto-fill this from the URL if left blank.</div>
+    </div>
   </div>
 
   <div class="meta" id="feeds-meta">Loading…</div>
@@ -172,7 +208,7 @@
     feeds_reload(true);
   };
 
-  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0 };
+  let feedsState = { page: 1, pageSize: 50, q: "", totalMatches: 0, pendingUrl: "", pendingSource: "" };
 
   const F = (id) => document.getElementById(id);
 
@@ -279,7 +315,23 @@
         }).join("");
 
         F("feeds-lastRefresh").textContent = new Date().toLocaleTimeString();
-        feeds_noticeClear();
+        let showPendingNotice = false;
+        if (feedsState.pendingUrl) {
+          const firstRow = F("feeds-tbody").querySelector("tr[data-row]");
+          if (firstRow) {
+            const urlField = firstRow.querySelector('[data-k="url"]');
+            const sourceField = firstRow.querySelector('[data-k="source"]');
+            if (urlField) urlField.value = feedsState.pendingUrl;
+            if (sourceField) sourceField.value = feedsState.pendingSource || deriveSourceFromUrl(feedsState.pendingUrl);
+            feedsState.pendingUrl = "";
+            feedsState.pendingSource = "";
+            feeds_notice("ok", "✅ Added. Review the generated RSS URL and click Save.");
+            showPendingNotice = true;
+          }
+        }
+        if (!showPendingNotice) {
+          feeds_noticeClear();
+        }
       })
       .withFailureHandler(err => {
         const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
@@ -328,7 +380,15 @@
   function feeds_add(){
     const btn = F("feeds-addBtn");
     if (btn) btn.disabled = true;
-    feeds_notice("busy", "➕ Adding new feed row…");
+    const newUrl = (F("feeds-newUrl")?.value || "").trim();
+    const newSource = (F("feeds-newSource")?.value || "").trim();
+    if (newUrl) {
+      feedsState.pendingUrl = newUrl;
+      feedsState.pendingSource = newSource;
+      F("feeds-newUrl").value = "";
+      F("feeds-newSource").value = "";
+    }
+    feeds_notice("busy", newUrl ? "✨ Creating RSS feed row…" : "➕ Adding new feed row…");
 
     google.script.run
       .withSuccessHandler(res => {
@@ -355,6 +415,16 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+
+  function deriveSourceFromUrl(url){
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      const name = host.split(".")[0] || host;
+      return name ? name.charAt(0).toUpperCase() + name.slice(1) : "";
+    } catch (e) {
+      return "";
+    }
   }
 
   document.addEventListener("keydown", (e) => {
