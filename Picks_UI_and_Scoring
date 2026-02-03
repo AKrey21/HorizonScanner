@@ -85,7 +85,13 @@ function ui_getWeeklyPicks_v1() {
 
   const lastRow = sh.getLastRow();
   const lastCol = sh.getLastColumn();
-  if (lastRow < 2 || lastCol < 1) return { headers: [], rows: [] };
+  if (lastRow < 2 || lastCol < 1) {
+    return {
+      headers: [],
+      rows: [],
+      meta: { sheetName: SC_PICKS_SHEET, lastRow, lastCol }
+    };
+  }
 
   const values = sh.getRange(1, 1, lastRow, lastCol).getValues();
   const headers = values[0].map(h => String(h || "").trim());
@@ -102,7 +108,7 @@ function ui_getWeeklyPicks_v1() {
     }
     if (any) rows.push(obj);
   }
-  return { headers, rows };
+  return { headers, rows, meta: { sheetName: SC_PICKS_SHEET, lastRow, lastCol } };
 }
 
 function ui_runScoringNow_v1() {

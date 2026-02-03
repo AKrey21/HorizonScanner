@@ -129,6 +129,7 @@
 <script>
   let PICKS_ROWS = [];
   let PICKS_HEADERS = [];
+  let PICKS_META = {};
 
   function __init_picks() {
     picks_reloadConfig();
@@ -274,9 +275,10 @@
     google.script.run
       .withSuccessHandler(data => {
         try {
-          const safe = data || { headers: [], rows: [] };
+          const safe = data || { headers: [], rows: [], meta: {} };
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
+          PICKS_META = safe.meta || {};
           picks_renderFiltered();
           picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
         } catch (err) {
@@ -303,7 +305,11 @@
     if (!wrap) return;
 
     if (!rows.length) {
-      wrap.innerHTML = "<div style='padding:10px;color:#aaa'>No rows.</div>";
+      const meta = PICKS_META || {};
+      const info = meta.sheetName
+        ? ` (sheet: ${escapeHtml(meta.sheetName)}, lastRow=${meta.lastRow || 0}, lastCol=${meta.lastCol || 0})`
+        : "";
+      wrap.innerHTML = `<div style='padding:10px;color:#aaa'>No rows.${info}</div>`;
       return;
     }
 
