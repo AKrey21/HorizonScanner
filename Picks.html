@@ -274,8 +274,9 @@
     google.script.run
       .withSuccessHandler(data => {
         try {
-          PICKS_HEADERS = data.headers || [];
-          PICKS_ROWS = data.rows || [];
+          const safe = data || { headers: [], rows: [] };
+          PICKS_HEADERS = safe.headers || [];
+          PICKS_ROWS = safe.rows || [];
           picks_renderFiltered();
           picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
         } catch (err) {
