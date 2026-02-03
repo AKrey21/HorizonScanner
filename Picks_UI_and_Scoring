@@ -275,13 +275,13 @@ function sc_defaultConfig_() {
     version: "1.4-no-archive",
 
     scopeGateRegex:
-      "\\b(job|jobs|employment|employers?|employee|employees|worker|workers|workforce|labou?r|hiring|hire|recruit|recruitment|vacanc(y|ies)|headcount|staffing|layoff|layoffs|retrench(ment)?|redundan(cy|cies)|unemployment|wage|wages|salary|salaries|pay|bonus|skills?|training|upskilling|reskilling|workplace|wsh|safety|union|industrial\\s+relations|collective\\s+bargaining|gig|platform|migrant|foreign\\s+worker|retirement|pension)\\b",
+      "\\b(job|jobs|employment|employers?|employee|employees|worker|workers|workforce|labou?r|hiring|hire|recruit|recruitment|vacanc(y|ies)|headcount|staffing|layoff|layoffs|retrench(ment)?|redundan(cy|cies)|unemployment|wage|wages|salary|salaries|pay|bonus|skills?|training|upskilling|reskilling|workplace|wsh|safety|union|industrial\\s+relations|collective\\s+bargaining|gig|platform|migrant|migration|foreign\\s+worker|work\\s+permit|visa|retirement|pension|ai\\s+regulation|ai\\s+policy)\\b",
 
     topN: 15,
-    minScore: 6,
-    minPicks: 5,
-    usePercentileCutoff: false,
-    percentileCutoff: 0.2,
+    minScore: 4,
+    minPicks: 10,
+    usePercentileCutoff: true,
+    percentileCutoff: 0.6,
     recencyDays: 365,
     capPerTheme: 3,
     capPerPOI: 3,
@@ -289,12 +289,12 @@ function sc_defaultConfig_() {
     titleWeight: 1.2,
     descWeight: 1.0,
 
-    scopePenalty: 0.7,
+    scopePenalty: 0.85,
     phraseBoost: 2.0,
 
     // ✅ Learnability SOFT (kept)
     useLearnGate: true,
-    minLearnScore: 8,
+    minLearnScore: 6,
     learnabilityWeight: 1.6,
     learnPenaltyMultiplier: 0.8,
 
@@ -383,7 +383,7 @@ function sc_defaultConfig_() {
       job: ["role", "position", "vacancy"],
       skills: ["upskilling", "reskilling", "training", "apprenticeship", "certification"],
       gig: ["platform", "freelance", "contractor"],
-      migrant: ["foreign worker", "work permit", "s pass", "employment pass"],
+      migrant: ["foreign worker", "work permit", "s pass", "employment pass", "visa", "migration"],
       regulator: ["authority", "ministry", "agency"]
     },
 
