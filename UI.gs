@@ -963,31 +963,34 @@ function ui_createRssFeedFromUrl(payload) {
 
     const existing = loadExistingFeedUrls_(feedsSh);
 
-    let html;
+    let html = "";
+    let warning = "";
     try {
       html = fetchHtml_(url);
     } catch (e) {
-      return { ok: false, message: `Homepage fetch failed: ${e.message || e}` };
+      warning = `Homepage fetch failed (${e.message || e}). Using Google News fallback.`;
     }
 
-    const candidates = extractFeedCandidatesFromHtml_(url, html);
+    let finalFeeds = [];
+    if (html) {
+      const candidates = extractFeedCandidatesFromHtml_(url, html);
 
-    let geminiSuggestions = [];
-    try {
-      geminiSuggestions = geminiSuggestFeeds_(url, html, candidates);
-    } catch (e) {
-      geminiSuggestions = [];
-    }
+      let geminiSuggestions = [];
+      try {
+        geminiSuggestions = geminiSuggestFeeds_(url, html, candidates);
+      } catch (e) {
+        geminiSuggestions = [];
+      }
 
-    const combined = dedupeList_([].concat(candidates, geminiSuggestions));
+      const combined = dedupeList_([].concat(candidates, geminiSuggestions));
 
-    let finalFeeds = combined;
-    if (typeof VERIFY_FEED_FETCH !== "undefined" && VERIFY_FEED_FETCH) {
-      finalFeeds = combined
-        .filter(u => looksLikeFeedUrl_(u))
-        .filter(u => verifyFeedUrl_(u));
-    } else {
-      finalFeeds = combined.filter(u => looksLikeFeedUrl_(u));
+      if (typeof VERIFY_FEED_FETCH !== "undefined" && VERIFY_FEED_FETCH) {
+        finalFeeds = combined
+          .filter(u => looksLikeFeedUrl_(u))
+          .filter(u => verifyFeedUrl_(u));
+      } else {
+        finalFeeds = combined.filter(u => looksLikeFeedUrl_(u));
+      }
     }
 
     if (!finalFeeds.length) {
@@ -1002,7 +1005,8 @@ function ui_createRssFeedFromUrl(payload) {
       addedCount: added.length,
       added,
       feeds: finalFeeds,
-      sourceName
+      sourceName,
+      warning
     };
   } catch (err) {
     return { ok: false, message: err?.message || String(err), stack: err?.stack || "" };

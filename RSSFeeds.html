@@ -396,9 +396,11 @@
           }
           const addedCount = res.addedCount || 0;
           const sourceName = res.sourceName || newSource || newUrl;
-          feeds_notice("ok", addedCount
+          const warning = res.warning || "";
+          const baseMsg = addedCount
             ? `✅ Added ${addedCount} feed(s) for ${sourceName}.`
-            : "ℹ️ No new feeds added (already existed).");
+            : "ℹ️ No new feeds added (already existed).";
+          feeds_notice(warning ? "err" : "ok", warning ? `${baseMsg}\n${warning}` : baseMsg);
           F("feeds-q").value = sourceName;
           feeds_reload(true);
         })
