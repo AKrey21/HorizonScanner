@@ -270,6 +270,16 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
           }
         }
       }
+      if (!imgCid) {
+        const proxied = tryFetchProxyImageBlob_(t.imageUrl);
+        if (proxied) {
+          const proxyMime = (proxied.getContentType && proxied.getContentType()) || "";
+          if (isOutlookInlineImageMime_(proxyMime)) {
+            imgCid = `fs_img_${topicNo}`;
+            inlineImages.push({ cid: imgCid, blob: proxied, filename: imgCid });
+          }
+        }
+      }
     }
 
     // Offline PDF attachment (via pdf.gs)
@@ -431,10 +441,7 @@ function buildPreviewImageDataUrl_(label) {
 function email_getImageFallbackUrl_(url) {
   const raw = String(url || "").trim();
   if (!raw) return "";
-  if (raw.match(/\.(webp|avif)(\?|#|$)/i)) {
-    return buildImageProxyUrl_(raw);
-  }
-  return raw;
+  return buildImageProxyUrl_(raw);
 }
 
 function buildImageProxyUrl_(url) {
