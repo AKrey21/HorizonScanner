@@ -16,7 +16,7 @@
 
 const AI_PROVIDER_DEFAULT = "gemini";
 const AI_DEFAULT_MAX_OUTPUT_TOKENS = 600; // conservative default
-const GEMINI_DEFAULT_MODEL = "gemini-1.5-flash";
+const GEMINI_DEFAULT_MODEL = "gemini-2.0-flash";
 const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
 
 function getAiProvider_() {
