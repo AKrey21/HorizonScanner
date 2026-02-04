@@ -9,7 +9,7 @@
       <h3>Scoring Config (JSON)</h3>
       <p class="muted">Edit the config JSON directly. Save → Run scoring → Refresh picks.</p>
 
-      <!-- ✅ AI Prompt + options -->
+      <!--  AI Prompt + options -->
       <div class="aiBlock">
         <div class="aiRow">
           <textarea id="aiPrompt" rows="3"
@@ -65,7 +65,7 @@
         <div class="aiRow">
           <textarea id="llmPrompt" rows="3"
             placeholder='LLM ranking prompt (uses existing Theme/POI labels). Example:
-Highlight policy levers and workforce risks for 2025–2030.'
+Highlight policy levers and workforce risks for 2025-2030.'
             spellcheck="false"></textarea>
           <button id="btn_llmRun" class="btn" onclick="picks_runLlmRank()">Run LLM rank</button>
         </div>
@@ -143,7 +143,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
   .picksRoot .llmRecBadge--no { background: #3d1c1c; color: #ffd7d7; border: 1px solid #7a2b2b; }
   .picksRoot .llmRecBadge--unknown { background: #2a2a2a; color: #d8d8d8; border: 1px solid #444; }
 
-  /* ✅ AI block */
+  /*  AI block */
   .picksRoot .aiBlock { margin: 8px 0 10px 0; }
   .picksRoot .aiRow {
     display: grid;
@@ -270,7 +270,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     if (useBaseline) {
       baselineJsonText = document.getElementById("cfg_json")?.value || "";
       if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
-        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck “Use current JSON as baseline”) then try again.");
+        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.");
         return;
       }
     }
@@ -293,7 +293,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
           const ta = document.getElementById("cfg_json");
           if (ta) ta.value = res.jsonText;
 
-          picks_setAiStatus("Generated ✅ Review the JSON, then click “Save JSON”.");
+          picks_setAiStatus("Generated  Review the JSON, then click "Save JSON".");
         } catch (err) {
           console.error(err);
           picks_setAiStatus("UI error: " + (err.message || err));
@@ -316,7 +316,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
         const ta = document.getElementById("cfg_json");
         const jsonText = res && res.jsonText ? res.jsonText : "";
         if (ta) ta.value = jsonText;
-        picks_setStatus(jsonText ? "Loaded ✅" : "Loaded, but config was empty.");
+        picks_setStatus(jsonText ? "Loaded " : "Loaded, but config was empty.");
       })
       .withFailureHandler(e => {
         console.error(e);
@@ -332,7 +332,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     google.script.run
       .withSuccessHandler(res => {
         if (res && res.savedText && ta) ta.value = res.savedText;
-        picks_setStatus("Saved ✅");
+        picks_setStatus("Saved ");
       })
       .withFailureHandler(e => {
         console.error(e);
@@ -345,7 +345,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     picks_setStatus("Running scoring...");
     google.script.run
       .withSuccessHandler(msg => {
-        picks_setStatus((msg || "Scoring done ✅") + "\nRefreshing picks...");
+        picks_setStatus((msg || "Scoring done ") + "\nRefreshing picks...");
         picks_refresh();
       })
       .withFailureHandler(e => {
@@ -364,7 +364,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
           PICKS_META = safe.meta || {};
-          picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
+          picks_setStatus(`Refreshed  (${PICKS_ROWS.length} rows)`);
           picks_loadLlmCache();
         } catch (err) {
           console.error(err);
@@ -557,11 +557,11 @@ Highlight policy levers and workforce risks for 2025–2030.'
           const errList = Array.isArray(res.errors) ? res.errors : [];
           const errCount = errList.length;
           const tokenEstimate = res?.meta?.tokens_estimate;
-          const tokenNote = tokenEstimate ? ` — est tokens: ${tokenEstimate}` : "";
-          const errPreview = errCount ? ` — first errors: ${errList.slice(0, 3).join(" | ")}` : "";
+          const tokenNote = tokenEstimate ? ` - est tokens: ${tokenEstimate}` : "";
+          const errPreview = errCount ? ` - first errors: ${errList.slice(0, 3).join(" | ")}` : "";
           const msg = `LLM ranking complete (${res.results?.length || 0} scored from raw articles)` +
             tokenNote +
-            (errCount ? ` — ${errCount} errors` : "") +
+            (errCount ? ` - ${errCount} errors` : "") +
             errPreview;
           picks_setLlmStatus(msg);
         } catch (err) {
