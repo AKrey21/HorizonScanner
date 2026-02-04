@@ -233,8 +233,7 @@ function ui_addThemeRule() {
 
 /** ====== RSS Feeds (simple UI, previously UI_Feeds.gs) ====== */
 
-// Model used for Gemini suggestions
-const GEMINI_MODEL_ID = "gemini-2.5-flash";
+// Model used for AI suggestions is controlled via Script Properties (AI_PROVIDER / AI_MODEL)
 
 /** Return feeds for UI list */
 function ui_getFeeds_v1() {
@@ -305,6 +304,25 @@ function ui_deleteFeed_v1(row) {
   return { ok: true };
 }
 
+/** ====== AI Settings ====== */
+
+function ui_getAiSettings_v1() {
+  const props = PropertiesService.getScriptProperties();
+  const provider = String(props.getProperty("AI_PROVIDER") || "gemini").toLowerCase();
+  const model = String(props.getProperty("AI_MODEL") || "");
+  return { provider: provider === "openai" ? "openai" : "gemini", model };
+}
+
+function ui_setAiSettings_v1(provider, model) {
+  const props = PropertiesService.getScriptProperties();
+  const nextProvider = String(provider || "").toLowerCase() === "openai" ? "openai" : "gemini";
+  const nextModel = String(model || "").trim();
+  props.setProperty("AI_PROVIDER", nextProvider);
+  if (nextModel) props.setProperty("AI_MODEL", nextModel);
+  else props.deleteProperty("AI_MODEL");
+  return { ok: true };
+}
+
 /**
  * Gemini-assisted suggestion:
  * - paste homepage URL (or any text prompt)
@@ -323,9 +341,9 @@ function ui_geminiSuggestFeeds_v1(homepageOrPrompt) {
     return Array.from(new Set(deterministic)).slice(0, 10);
   }
 
-  // Require AIService gemini helper
-  if (typeof geminiGenerateText_ !== "function") {
-    throw new Error("Missing geminiGenerateText_(). Add/keep AIService.gs.");
+  // Require AIService helper
+  if (typeof aiGenerateText_ !== "function") {
+    throw new Error("Missing aiGenerateText_(). Add/keep AIService.gs.");
   }
 
   const prompt =
@@ -343,8 +361,7 @@ Rules:
   https://news.google.com/rss/search?q=site:DOMAIN&hl=en-SG&gl=SG&ceid=SG:en
 - return at most 10 feeds.`;
 
-  const text = geminiGenerateText_(prompt, {
-    model: GEMINI_MODEL_ID,
+  const text = aiGenerateText_(prompt, {
     temperature: 0.2,
     maxOutputTokens: 512,
     responseMimeType: "application/json"
