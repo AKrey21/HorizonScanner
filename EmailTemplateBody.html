@@ -68,22 +68,18 @@
         <? for (var i = 0; i < topics.length; i++) { var t = topics[i]; ?>
           <tr>
             <td width="966" colspan="4" valign="top" style="background:<?= t.barColor ?>;padding:0;">
-              <p class="MsoNormal"><span class="fs-section"><?= t.sectionTitle ?></span></p>
+              <p class="MsoNormal" style="margin:0;padding:6px 10px;"><span class="fs-section"><?= t.sectionTitle ?></span></p>
             </td>
           </tr>
           <tr>
-            <td width="482" colspan="2" valign="top" style="width:361.5pt;padding:0;">
-              <p class="MsoNormal"><b><?= t.title ?></b></p>
-              <p class="MsoNormal"><b>&nbsp;</b></p>
-              <p class="MsoListParagraph" style="margin-left:0cm"><?= t.relevance20 ?></p>
-              <p class="MsoNormal"><b>&nbsp;</b></p>
-              <p class="MsoNormal"><?!= t.summaryHtml ?></p>
-              <p class="MsoNormal">&nbsp;</p>
-              <p class="MsoNormal">Click <u><span style="color:#467886"><a href="<?= t.articleUrl ?>" target="_blank" rel="noopener">here</a></span></u> to read more.</p>
-              <p class="MsoNormal">&nbsp;</p>
+            <td width="482" colspan="2" valign="top" style="width:361.5pt;padding:6px 10px;">
+              <p class="MsoNormal" style="margin:0 0 6px 0;"><b><?= t.title ?></b></p>
+              <p class="MsoListParagraph" style="margin:0 0 6px 0;"><?= t.relevance20 ?></p>
+              <p class="MsoNormal" style="margin:0 0 8px 0;"><?!= t.summaryHtml ?></p>
+              <p class="MsoNormal" style="margin:0;">Click <u><span style="color:#467886"><a href="<?= t.articleUrl ?>" target="_blank" rel="noopener">here</a></span></u> to read more.</p>
             </td>
-            <td width="287" style="width:215.55pt;padding:0;">
-              <p class="MsoNormal" align="center" style="text-align:center;">
+            <td width="287" style="width:215.55pt;padding:6px 10px;">
+              <p class="MsoNormal" align="center" style="text-align:center;margin:0;">
                 <? if (t.imgSrc) { ?>
                   <img src="<?= t.imgSrc ?>" alt="" style="max-width:246px;width:246px;height:auto;display:block;border:0;" />
                 <? } else { ?>
@@ -91,8 +87,8 @@
                 <? } ?>
               </p>
             </td>
-            <td width="197" style="width:147.75pt;padding:0;">
-              <p class="MsoNormal" align="center" style="text-align:center;">
+            <td width="197" style="width:147.75pt;padding:6px 8px;">
+              <p class="MsoNormal" align="center" style="text-align:center;margin:0;">
                 <?= t.attachmentLabel ?>
               </p>
             </td>
