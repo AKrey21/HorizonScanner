@@ -264,13 +264,15 @@ Highlight policy levers and workforce risks for 2025-2030.'
     const promptEl = document.getElementById("aiPrompt");
     const userPrompt = (promptEl ? promptEl.value : "").trim();
 
-    const useBaseline = !!document.getElementById("aiUseBaseline")?.checked;
+    const baselineEl = document.getElementById("aiUseBaseline");
+    const useBaseline = !!(baselineEl && baselineEl.checked);
 
     let baselineJsonText = "";
     if (useBaseline) {
-      baselineJsonText = document.getElementById("cfg_json")?.value || "";
+      const cfgEl = document.getElementById("cfg_json");
+      baselineJsonText = (cfgEl && cfgEl.value) || "";
       if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
-        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.");
+        picks_setAiStatus('Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.');
         return;
       }
     }
@@ -293,7 +295,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
           const ta = document.getElementById("cfg_json");
           if (ta) ta.value = res.jsonText;
 
-          picks_setAiStatus("Generated  Review the JSON, then click "Save JSON".");
+          picks_setAiStatus('Generated  Review the JSON, then click "Save JSON".');
         } catch (err) {
           console.error(err);
           picks_setAiStatus("UI error: " + (err.message || err));
@@ -381,7 +383,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
   function picks_renderFiltered() {
     const inp = document.getElementById("filterText");
     const q = (inp ? inp.value : "").toLowerCase();
-    const sortMode = (document.getElementById("picksSort")?.value || "default");
+    const sortEl = document.getElementById("picksSort");
+    const sortMode = (sortEl && sortEl.value) || "default";
 
     const rows = !q
       ? PICKS_ROWS
@@ -415,8 +418,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
       sortedRows.sort((a, b) => {
         const aKey = picks_buildLlmKey(a);
         const bKey = picks_buildLlmKey(b);
-        const aScore = Number(PICKS_LLM_RESULTS[aKey]?.final_score || 0);
-        const bScore = Number(PICKS_LLM_RESULTS[bKey]?.final_score || 0);
+        const aScore = Number((PICKS_LLM_RESULTS[aKey] && PICKS_LLM_RESULTS[aKey].final_score) || 0);
+        const bScore = Number((PICKS_LLM_RESULTS[bKey] && PICKS_LLM_RESULTS[bKey].final_score) || 0);
         return bScore - aScore;
       });
     }
@@ -480,7 +483,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_getLlmRecInfo(llm) {
-    const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
+    const raw = String((llm && (llm.publish_recommendation || llm.recommendation)) || "").trim().toLowerCase();
     const isYes = ["yes", "y", "publish", "feature", "recommend", "recommended", "include"].some(v => raw === v || raw.includes(v));
     const isNo = ["no", "n", "skip", "exclude", "reject"].some(v => raw === v || raw.includes(v));
     if (isYes) return { label: "Recommend", className: "llmRecBadge--yes", isRecommended: true };
@@ -490,17 +493,17 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   function picks_applyLlmResults(res, options) {
     PICKS_LLM_RESULTS = {};
-    const results = Array.isArray(res?.results) ? res.results : [];
+    const results = Array.isArray(res && res.results) ? res.results : [];
     results.forEach(item => {
       if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
     });
-    PICKS_LLM_META = res?.meta || null;
+    PICKS_LLM_META = (res && res.meta) || null;
 
     const hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
-    if (!hasPicks && options?.allowFallback) {
+    if (!hasPicks && options && options.allowFallback) {
       const fallbackRows = results.map(item => ({
-        Title: item?.title || "",
-        Link: item?.url || ""
+        Title: (item && item.title) || "",
+        Link: (item && item.url) || ""
       }));
       PICKS_ROWS = fallbackRows;
       PICKS_HEADERS = ["Title", "Link"];
@@ -533,14 +536,17 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_runLlmRank() {
-    const prompt = (document.getElementById("llmPrompt")?.value || "").trim();
+    const llmPromptEl = document.getElementById("llmPrompt");
+    const prompt = ((llmPromptEl && llmPromptEl.value) || "").trim();
     if (!prompt) {
       picks_setLlmStatus("Please enter an LLM prompt.");
       return;
     }
 
-    const maxRows = Number((document.getElementById("llmMax")?.value || "").trim() || 20);
-    const fetchText = !!document.getElementById("llmFetch")?.checked;
+    const llmMaxEl = document.getElementById("llmMax");
+    const llmFetchEl = document.getElementById("llmFetch");
+    const maxRows = Number((((llmMaxEl && llmMaxEl.value) || "").trim() || 20));
+    const fetchText = !!(llmFetchEl && llmFetchEl.checked);
     picks_setLlmBusy(true);
     picks_setLlmStatus("Ranking raw articles...");
 
@@ -548,7 +554,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
       .withSuccessHandler(res => {
         try {
           if (!res || res.ok !== true) {
-            picks_setLlmStatus("LLM rank failed: " + (res?.message || "unknown error"));
+            picks_setLlmStatus("LLM rank failed: " + ((res && res.message) || "unknown error"));
             return;
           }
           picks_applyLlmResults(res, { allowFallback: true });
@@ -556,10 +562,11 @@ Highlight policy levers and workforce risks for 2025-2030.'
           picks_renderFiltered();
           const errList = Array.isArray(res.errors) ? res.errors : [];
           const errCount = errList.length;
-          const tokenEstimate = res?.meta?.tokens_estimate;
+          const tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
           const tokenNote = tokenEstimate ? ` - est tokens: ${tokenEstimate}` : "";
           const errPreview = errCount ? ` - first errors: ${errList.slice(0, 3).join(" | ")}` : "";
-          const msg = `LLM ranking complete (${res.results?.length || 0} scored from raw articles)` +
+          const resultCount = res && res.results ? res.results.length : 0;
+          const msg = `LLM ranking complete (${resultCount} scored from raw articles)` +
             tokenNote +
             (errCount ? ` - ${errCount} errors` : "") +
             errPreview;
