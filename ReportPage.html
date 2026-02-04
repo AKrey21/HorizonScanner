@@ -99,6 +99,10 @@
   #rep_output{
     max-width: 100%;
     word-break: break-word;
+    --rep-preview-scale: 0.85;
+    transform: scale(var(--rep-preview-scale));
+    transform-origin: top left;
+    width: calc(100% / var(--rep-preview-scale));
   }
   #rep_output table{
     width: 100% !important;
