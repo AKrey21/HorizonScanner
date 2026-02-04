@@ -77,6 +77,99 @@ function ui_getFuturescansPreviewSample() {
 }
 
 /* =========================================================================
+ * UI: Approved picks sidebar (LLM cache -> Weekly Picks fallback)
+ * ========================================================================= */
+
+function ui_getApprovedPicks() {
+  return rpt_getApprovedPicks_();
+}
+
+function rpt_getApprovedPicks_() {
+  const llmPicks = rpt_getApprovedPicksFromLlm_();
+  if (llmPicks.length) return llmPicks;
+  return rpt_getWeeklyPicks_();
+}
+
+function rpt_getApprovedPicksFromLlm_() {
+  if (typeof raw_readLlmRankSheet_ !== "function") return [];
+  const cache = raw_readLlmRankSheet_();
+  const results = Array.isArray(cache?.results) ? cache.results : [];
+  if (!results.length) return [];
+
+  const items = results
+    .filter(item => rpt_isLlmRecommended_(item?.llm || {}))
+    .map(item => ({
+      title: String(item?.title || item?.llm?.title || "").trim(),
+      url: String(item?.url || item?.llm?.url || "").trim()
+    }))
+    .filter(item => item.url);
+
+  return items;
+}
+
+function rpt_getWeeklyPicks_() {
+  const ss = getSpreadsheet_();
+  const sheetName = (typeof PICKS_SHEET !== "undefined" && PICKS_SHEET) ? PICKS_SHEET : "Weekly Picks";
+  const sh = ss.getSheetByName(sheetName);
+  if (!sh) return [];
+
+  const lastRow = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  if (lastRow < 2 || lastCol < 2) return [];
+
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const hmap = (typeof headerMap_ === "function")
+    ? headerMap_(headers)
+    : rpt_headerMap_(headers);
+
+  const colTitle = hmap["title"] || 1;
+  const colLink = hmap["link"] || hmap["url"] || 2;
+  const colDate = hmap["date"] || 0;
+  const colScore = hmap["score"] || 0;
+
+  const values = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const rows = values.map(row => ({
+    title: String(row[colTitle - 1] || "").trim(),
+    url: String(row[colLink - 1] || "").trim(),
+    date: colDate ? row[colDate - 1] : "",
+    score: colScore ? Number(row[colScore - 1]) || 0 : null
+  })).filter(item => item.title && item.url);
+
+  if (!rows.length) return [];
+
+  const hasScore = colScore > 0;
+  rows.sort((a, b) => {
+    if (hasScore && b.score !== a.score) return b.score - a.score;
+    return rpt_safeDateMs_(b.date) - rpt_safeDateMs_(a.date);
+  });
+
+  return rows.slice(0, 12).map(item => ({ title: item.title, url: item.url }));
+}
+
+function rpt_headerMap_(headerRow) {
+  const map = {};
+  headerRow.forEach((h, i) => {
+    const key = String(h || "").trim().toLowerCase();
+    if (key) map[key] = i + 1;
+  });
+  return map;
+}
+
+function rpt_safeDateMs_(value) {
+  const t = new Date(value).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+function rpt_isLlmRecommended_(llm) {
+  const raw = String((llm && (llm.publish_recommendation || llm.recommendation)) || "").trim().toLowerCase();
+  const yesTokens = ["yes", "y", "publish", "feature", "recommend", "recommended", "include", "maybe"];
+  const noTokens = ["no", "n", "skip", "exclude", "not"];
+  if (yesTokens.some(token => raw === token || raw.indexOf(token) !== -1)) return true;
+  if (noTokens.some(token => raw === token || raw.indexOf(token) !== -1)) return false;
+  return false;
+}
+
+/* =========================================================================
  * UI: Generate Outlook draft (.eml) v1 — simple HTML (external images)
  * Returns: { filename, b64 }
  * ========================================================================= */
