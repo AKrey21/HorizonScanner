@@ -123,11 +123,25 @@ Highlight policy levers and workforce risks for 2025–2030.'
   .picksRoot .muted { color: #aaa; font-size: 12px; margin-top: 0; }
   .picksRoot .pre { background: #0b0b0b; border: 1px solid #333; border-radius: 10px; padding: 10px; overflow: auto; max-height: 160px; white-space: pre-wrap; }
 
-  .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; }
-  .picksRoot table { border-collapse: collapse; width: 100%; }
+  .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; background: #0d0d0d; }
+  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
   .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
-  .picksRoot th { position: sticky; top: 0; background: #151515; z-index: 1; text-align: left; }
+  .picksRoot td { background: #0f0f0f; }
+  .picksRoot tr:nth-child(even) td { background: #121212; }
+  .picksRoot th { position: sticky; top: 0; background: #1b1b1b; z-index: 1; text-align: left; color: #f5f5f5; }
   .picksRoot a { color: #9bd; }
+  .picksRoot .llmRecBadge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .picksRoot .llmRecBadge--yes { background: #1b4d2b; color: #d7ffe6; border: 1px solid #2e7d4f; }
+  .picksRoot .llmRecBadge--no { background: #3d1c1c; color: #ffd7d7; border: 1px solid #7a2b2b; }
+  .picksRoot .llmRecBadge--unknown { background: #2a2a2a; color: #d8d8d8; border: 1px solid #444; }
 
   /* ✅ AI block */
   .picksRoot .aiBlock { margin: 8px 0 10px 0; }
@@ -376,21 +390,27 @@ Highlight policy levers and workforce risks for 2025–2030.'
     const wrap = document.getElementById("picks_tableWrap");
     if (!wrap) return;
 
-    if (!rows.length) {
+    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    const recommendedRows = useLlm
+      ? rows.filter(r => picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended)
+      : rows;
+    const displayRows = useLlm ? recommendedRows : rows;
+
+    if (!displayRows.length) {
       const meta = PICKS_META || {};
       const info = meta.sheetName
         ? ` (sheet: ${escapeHtml(meta.sheetName)}, lastRow=${meta.lastRow || 0}, lastCol=${meta.lastCol || 0})`
         : "";
-      wrap.innerHTML = `<div style='padding:10px;color:#aaa'>No rows.${info}</div>`;
+      const llmNote = useLlm ? " No recommended rows (LLM)." : "";
+      wrap.innerHTML = `<div style='padding:10px;color:#bbb'>No rows.${llmNote}${info}</div>`;
       return;
     }
 
-    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(rows[0]);
-    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(displayRows[0]);
     const extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
     const finalHeaders = headers.concat(extraHeaders);
 
-    const sortedRows = rows.slice();
+    const sortedRows = displayRows.slice();
     if (sortMode === "llmScoreDesc") {
       sortedRows.sort((a, b) => {
         const aKey = picks_buildLlmKey(a);
@@ -418,8 +438,9 @@ Highlight policy levers and workforce risks for 2025–2030.'
       if (useLlm) {
         const key = picks_buildLlmKey(r);
         const llm = PICKS_LLM_RESULTS[key] || {};
+        const recInfo = picks_getLlmRecInfo(llm);
         html += `<td>${escapeHtml(llm.final_score != null ? String(llm.final_score) : "")}</td>`;
-        html += `<td>${escapeHtml(llm.publish_recommendation || "")}</td>`;
+        html += `<td><span class="llmRecBadge ${recInfo.className}">${escapeHtml(recInfo.label)}</span></td>`;
         html += `<td>${escapeHtml(llm.summary || "")}</td>`;
       }
       html += "</tr>";
@@ -456,6 +477,15 @@ Highlight policy levers and workforce risks for 2025–2030.'
     const link = picks_getField(row, ["Link", "URL", "Url", "link", "url"]);
     const title = picks_getField(row, ["Title", "title"]);
     return link || title;
+  }
+
+  function picks_getLlmRecInfo(llm) {
+    const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
+    const isYes = ["yes", "y", "publish", "feature", "recommend", "recommended", "include"].some(v => raw === v || raw.includes(v));
+    const isNo = ["no", "n", "skip", "exclude", "reject"].some(v => raw === v || raw.includes(v));
+    if (isYes) return { label: "Recommend", className: "llmRecBadge--yes", isRecommended: true };
+    if (isNo) return { label: "Skip", className: "llmRecBadge--no", isRecommended: false };
+    return { label: raw ? raw : "Unknown", className: "llmRecBadge--unknown", isRecommended: false };
   }
 
   function picks_applyLlmResults(res, options) {
