@@ -233,6 +233,7 @@
   // optional init hook so index can call it
   window.__init_report = function(){
     fsReport_wirePreviewDropZone();
+    fsReport_loadApprovedPicks();
     google.script.run
       .withSuccessHandler(html => {
         if (html) {
@@ -362,8 +363,8 @@
       return;
     }
 
-    lines.forEach(urlText => {
-      const data = fsReport_buildCardData(urlText);
+    lines.forEach(item => {
+      const data = fsReport_normalizeCardData(item);
       const card = document.createElement("div");
       card.className = "rep_card";
       card.setAttribute("draggable", "true");
@@ -379,6 +380,17 @@
     });
   }
 
+  function fsReport_loadApprovedPicks(){
+    google.script.run
+      .withSuccessHandler(items => {
+        fsReport_renderApprovedCards(Array.isArray(items) ? items : []);
+      })
+      .withFailureHandler(() => {
+        fsReport_renderApprovedCards([]);
+      })
+      .ui_getApprovedPicks();
+  }
+
   function fsReport_buildCardData(urlText){
     try {
       const url = new URL(urlText);
@@ -387,6 +399,14 @@
     } catch (err) {
       return { title: "Approved article", url: urlText };
     }
+  }
+
+  function fsReport_normalizeCardData(item){
+    if (!item) return { title: "Approved article", url: "" };
+    if (typeof item === "string") return fsReport_buildCardData(item);
+    const url = item.url || item.link || item.href || "";
+    const title = item.title || (url ? fsReport_buildCardData(url).title : "Approved article");
+    return { title, url };
   }
 
   function fsReport_setBusy(isBusy, msg) {
@@ -438,7 +458,7 @@
     }
 
     fsReport_setBusy(true, "Generating report preview…");
-    fsReport_renderApprovedCards(lines);
+    fsReport_loadApprovedPicks();
 
     google.script.run
       .withSuccessHandler(html => {
