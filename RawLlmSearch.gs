@@ -178,8 +178,66 @@ const RAW_LLM_GUIDE_TEXT = [
   "If the article is clearly irrelevant, keep relevance_sg_mom and summary short but valid strings."
 ].join("\n");
 
+const RAW_LLM_SCORE_ONLY_GUIDE_TEXT = [
+  "You are “FutureScans@MOM Article Rater”.",
+  "",
+  "Goal:",
+  "Given ONE news article (title + url + date + source + text/snippet + existing Theme/POI labels), decide if it is suitable for a weekly workforce/workplace/future-of-work horizon scan. Prefer structural/futures signals, evidence-backed reporting, and clear “levers” (policy/employer/institution actions). Avoid pure politics, celebrity gossip, stock/earnings-only pieces, and generic career self-help.",
+  "",
+  "The Theme/POI labels are already assigned; DO NOT re-classify or change them. Focus on scoring and recommendation only.",
+  "",
+  "Output MUST be valid JSON only (no markdown, no commentary). If article text is missing or too short, still score using what is available and set uncertainty=\"high\".",
+  "",
+  "========================",
+  "GATES",
+  "========================",
+  "Hard gates (gate_pass must be true to recommend publish/maybe):",
+  "1) topic_relevance must be >= 2 (0–3 scale)",
+  "2) article is not primarily unrelated politics/celebrity/earnings-only",
+  "3) has at least ONE of: lever OR credible evidence OR clear workforce/workplace policy implication",
+  "",
+  "topic_relevance scale:",
+  "0 = not about workforce/workplace/future-of-work",
+  "1 = tangential (weak linkage)",
+  "2 = clearly relevant",
+  "3 = strongly relevant and central",
+  "",
+  "========================",
+  "SCORING (0–100)",
+  "========================",
+  "Compute final_score using:",
+  "- policy_or_operational_lever (0–20): concrete lever/action (law, regulation, programme, employer practice)",
+  "- evidence_strength (0–20): credible stats/surveys/reports/official sources (not just opinions)",
+  "- futures_signal (0–15): structural shift / forward-looking risk/opportunity",
+  "- distributional_impact (0–10): identifies affected groups (e.g., older workers, women, low-wage, migrants, youth)",
+  "- transferability_to_singapore_MOM (0–15): plausible learning/applicability to Singapore/MOM levers",
+  "- novelty (0–10): new/developing, not evergreen advice",
+  "- source_credibility (0–10): reputable outlet and/or citing primary sources",
+  "",
+  "publish_recommendation:",
+  "- \"publish\" if final_score >= 70 AND gate_pass=true",
+  "- \"maybe\" if 55–69 AND gate_pass=true",
+  "- \"skip\" otherwise",
+  "",
+  "========================",
+  "RETURN JSON ONLY (schema)",
+  "========================",
+  "{",
+  "  \"gate_pass\": boolean,",
+  "  \"topic_relevance\": 0|1|2|3,",
+  "  \"final_score\": number,",
+  "  \"publish_recommendation\": \"publish\"|\"maybe\"|\"skip\",",
+  "  \"uncertainty\": \"low\"|\"medium\"|\"high\"",
+  "}",
+  "",
+  "Now rate the article using ONLY the provided inputs."
+].join("\n");
+
 const RAW_LLM_MAX_TEXT_CHARS = 6000;
+const RAW_LLM_SCORE_MAX_TEXT_CHARS = 1200;
 const RAW_LLM_RANK_CACHE_KEY = "RAW_LLM_RANK_CACHE_V1";
+const RAW_LLM_RANK_PROGRESS_KEY = "RAW_LLM_RANK_PROGRESS_V1";
+const RAW_LLM_RANK_TIME_BUDGET_MS = 250000;
 const RAW_LLM_RANK_SHEET = "Raw LLM Rank Cache";
 const RAW_LLM_RANK_META_SHEET = "Raw LLM Rank Meta";
 
@@ -247,8 +305,9 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     const prompt = String(payload?.prompt || "").trim();
     if (!prompt) return { ok: false, message: "Missing prompt." };
 
-    const maxRows = Math.max(1, Math.min(60, Number(payload?.maxRows || 20)));
+    const topN = Math.max(1, Number(payload?.maxRows || 20));
     const fetchText = payload?.fetchText === true;
+    const scoreFetchText = false;
 
     const raw = ui_getRawArticles_bootstrap_v1();
     if (!raw || raw.ok !== true) {
@@ -256,14 +315,95 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     }
     const rows = Array.isArray(raw.rows) ? raw.rows : [];
 
+    const startedAt = Date.now();
     const results = [];
     const errors = [];
-    const target = rows.slice(0, maxRows);
-    let promptChars = 0;
+    const progress = raw_getLlmRankProgress_();
+    const sameJob = progress &&
+      progress.prompt === prompt &&
+      progress.topN === topN &&
+      progress.fetchText === fetchText;
 
-    target.forEach((row) => {
+    if (!sameJob && progress) {
+      raw_clearLlmRankProgress_();
+    }
+
+    const scored = sameJob && Array.isArray(progress?.scored) ? progress.scored : [];
+    let promptChars = sameJob ? Number(progress?.promptChars || 0) : 0;
+    let nextIndex = sameJob ? Number(progress?.nextIndex || 0) : 0;
+
+    for (let i = nextIndex; i < rows.length; i += 1) {
+      if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
+        nextIndex = i;
+        break;
+      }
+      const row = rows[i];
       try {
-        const article = raw_buildLlmArticle_(row, fetchText);
+        const article = raw_buildLlmArticle_(row, scoreFetchText);
+        const llmPrompt = raw_buildLlmScorePrompt_(prompt, article);
+        promptChars += llmPrompt.length;
+        const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 600 });
+        const parsed = feeds_safeParseJsonObject_(responseText);
+        if (!parsed) {
+          errors.push(`No JSON parsed for: ${article.url || article.title}`);
+          continue;
+        }
+
+        const finalScore = Number(parsed.final_score);
+        const llm = Object.assign({}, parsed, {
+          final_score: Number.isFinite(finalScore) ? finalScore : 0
+        });
+
+        scored.push({
+          key: row.link || row.title,
+          title: article.title,
+          url: article.url,
+          llm,
+          row_index: i
+        });
+      } catch (err) {
+        errors.push(String(err?.message || err));
+      }
+      nextIndex = i + 1;
+    }
+
+    if (nextIndex < rows.length) {
+      raw_setLlmRankProgress_({
+        prompt,
+        topN,
+        fetchText,
+        nextIndex,
+        promptChars,
+        scored,
+        errors: errors.slice(0, 50)
+      });
+      return {
+        ok: true,
+        status: "in_progress",
+        meta: {
+          prompt,
+          requested_top_n: topN,
+          scored_total: scored.length,
+          total_rows: rows.length,
+          next_index: nextIndex,
+          prompt_chars_total: promptChars,
+          tokens_estimate: estimateTokensFromChars_(promptChars),
+          source: "Raw Articles",
+          savedAt: new Date().toISOString()
+        },
+        results: [],
+        errors
+      };
+    }
+
+    const topCandidates = scored
+      .slice()
+      .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)))
+      .slice(0, topN);
+
+    topCandidates.forEach((candidate) => {
+      try {
+        const article = raw_buildLlmArticle_(rows[candidate.row_index], fetchText);
         const llmPrompt = raw_buildLlmPrompt_(prompt, article);
         promptChars += llmPrompt.length;
         const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
@@ -279,7 +419,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
         });
 
         results.push({
-          key: row.link || row.title,
+          key: candidate.key,
           title: article.title,
           url: article.url,
           llm
@@ -291,17 +431,23 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
     const meta = {
       prompt,
-      requested: target.length,
-      scored: results.length,
+      requested_top_n: topN,
+      scored_total: scored.length,
+      scored_top_n: results.length,
+      total_rows: rows.length,
+      score_fetch_text: scoreFetchText,
+      top_n_fetch_text: fetchText,
       prompt_chars_total: promptChars,
       tokens_estimate: estimateTokensFromChars_(promptChars),
       source: "Raw Articles",
       savedAt: new Date().toISOString()
     };
+    raw_clearLlmRankProgress_();
     raw_saveLlmRankCache_({ results, meta });
 
     return {
       ok: true,
+      status: "done",
       meta,
       results,
       errors
@@ -355,6 +501,34 @@ function raw_saveLlmRankCache_(payload) {
   });
   PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_CACHE_KEY, serialized);
   raw_writeLlmRankSheet_(safe);
+}
+
+function raw_getLlmRankProgress_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(RAW_LLM_RANK_PROGRESS_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    return null;
+  }
+}
+
+function raw_setLlmRankProgress_(payload) {
+  const safe = payload || {};
+  const serialized = JSON.stringify({
+    prompt: safe.prompt || "",
+    topN: Number(safe.topN || 0),
+    fetchText: safe.fetchText === true,
+    nextIndex: Number(safe.nextIndex || 0),
+    promptChars: Number(safe.promptChars || 0),
+    scored: Array.isArray(safe.scored) ? safe.scored : [],
+    errors: Array.isArray(safe.errors) ? safe.errors.slice(0, 50) : []
+  });
+  PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_PROGRESS_KEY, serialized);
+}
+
+function raw_clearLlmRankProgress_() {
+  PropertiesService.getScriptProperties().deleteProperty(RAW_LLM_RANK_PROGRESS_KEY);
 }
 
 function raw_getOrCreateSheet_(name) {
@@ -539,6 +713,24 @@ function raw_buildLlmPrompt_(userPrompt, article) {
   const clippedText = clampText_(article.text, RAW_LLM_MAX_TEXT_CHARS);
   return [
     RAW_LLM_GUIDE_TEXT,
+    "",
+    `User prompt (sorting intent): ${userPrompt}`,
+    "",
+    "Article:",
+    `Title: ${article.title}`,
+    `URL: ${article.url}`,
+    `Date: ${article.date}`,
+    `Source: ${article.source}`,
+    `Theme (preassigned): ${article.theme}`,
+    `POI (preassigned): ${article.poi}`,
+    `Text/snippet: ${clippedText}`
+  ].join("\n");
+}
+
+function raw_buildLlmScorePrompt_(userPrompt, article) {
+  const clippedText = clampText_(article.text, RAW_LLM_SCORE_MAX_TEXT_CHARS);
+  return [
+    RAW_LLM_SCORE_ONLY_GUIDE_TEXT,
     "",
     `User prompt (sorting intent): ${userPrompt}`,
     "",
