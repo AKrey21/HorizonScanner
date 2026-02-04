@@ -178,6 +178,8 @@ const RAW_LLM_GUIDE_TEXT = [
   "If the article is clearly irrelevant, keep relevance_sg_mom and summary short but valid strings."
 ].join("\n");
 
+const RAW_LLM_MAX_TEXT_CHARS = 6000;
+
 function ui_runWeeklyPicksLlmRank_v1(payload) {
   try {
     const prompt = String(payload?.prompt || "").trim();
@@ -391,6 +393,7 @@ function raw_buildLlmArticle_(row, fetchText) {
 }
 
 function raw_buildLlmPrompt_(userPrompt, article) {
+  const clippedText = clampText_(article.text, RAW_LLM_MAX_TEXT_CHARS);
   return [
     RAW_LLM_GUIDE_TEXT,
     "",
@@ -403,11 +406,12 @@ function raw_buildLlmPrompt_(userPrompt, article) {
     `Source: ${article.source}`,
     `Theme (preassigned): ${article.theme}`,
     `POI (preassigned): ${article.poi}`,
-    `Text/snippet: ${article.text}`
+    `Text/snippet: ${clippedText}`
   ].join("\n");
 }
 
 function weekly_buildLlmPrompt_(userPrompt, article) {
+  const clippedText = clampText_(article.text, RAW_LLM_MAX_TEXT_CHARS);
   return [
     WEEKLY_PICKS_LLM_GUIDE_TEXT,
     "",
@@ -420,6 +424,13 @@ function weekly_buildLlmPrompt_(userPrompt, article) {
     `Source: ${article.source}`,
     `Theme (preassigned): ${article.theme}`,
     `POI (preassigned): ${article.poi}`,
-    `Text/snippet: ${article.text}`
+    `Text/snippet: ${clippedText}`
   ].join("\n");
+}
+
+function clampText_(text, maxChars) {
+  const limit = Number(maxChars);
+  const raw = String(text || "");
+  if (!Number.isFinite(limit) || limit <= 0 || raw.length <= limit) return raw;
+  return raw.slice(0, limit).trim() + "…";
 }
