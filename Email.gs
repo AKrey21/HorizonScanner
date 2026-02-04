@@ -382,26 +382,12 @@ function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
 }
 
 function buildPreviewBannerDataUrl_() {
-  try {
-    const bannerBlob = getFsBannerBlob_();
-    if (bannerBlob) {
-      const mime = bannerBlob.getContentType() || "image/jpeg";
-      const b64 = Utilities.base64Encode(bannerBlob.getBytes());
-      return `data:${mime};base64,${b64}`;
-    }
-  } catch (e) {
-    // fall back to placeholder banner
+  const scriptBanner = PropertiesService.getScriptProperties().getProperty("FS_BANNER_DATA_URI");
+  if (scriptBanner) {
+    return scriptBanner;
   }
 
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="966" height="278">` +
-    `<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#002A7B"/>` +
-    `<stop offset="1" stop-color="#0D47A1"/></linearGradient></defs>` +
-    `<rect width="966" height="278" fill="url(#g)"/>` +
-    `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" ` +
-    `font-family="Aptos,Segoe UI,Arial" font-size="36" fill="#ffffff">` +
-    `FutureScans@MOM</text></svg>`;
-  return "data:image/svg+xml;base64," + Utilities.base64Encode(svg);
+  return "";
 }
 
 function buildPreviewImageDataUrl_(label) {
