@@ -517,6 +517,7 @@
         <datalist id="raw-kwList"></datalist>
         <div class="chips" id="raw-kwExcChips"></div>
       </div>
+
     </div>
 
     <!-- Table/content -->
@@ -586,7 +587,6 @@
   }
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
-
   function raw_setBusyUI(isBusy){
     ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn"].forEach(id => {
       const btn = R(id);
@@ -829,7 +829,6 @@
     if (sv === "themeAsc") filtered.sort((a,b)=> cmpStr(a.theme,b.theme));
     if (sv === "poiAsc")   filtered.sort((a,b)=> cmpStr(a.poi,b.poi));
     if (sv === "titleAsc") filtered.sort((a,b)=> cmpStr(a.title,b.title));
-
     rawState.filtered = filtered;
 
     raw_updateSummary();
@@ -845,7 +844,6 @@
     if (rawState.selKwExc.size)  parts.push(`Exclude: ${rawState.selKwExc.size}`);
     if ((R("raw-dateFrom").value||"") || (R("raw-dateTo").value||"")) parts.push("Date range");
     if ((R("raw-q").value||"").trim()) parts.push("Search");
-
     R("raw-summary").querySelector("span").innerHTML =
       parts.length ? `Active filters: <b>${raw_escape(parts.join(" • "))}</b>` : `Active filters: <b>none</b>`;
 
