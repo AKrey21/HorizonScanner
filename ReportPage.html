@@ -261,15 +261,66 @@
       .withSuccessHandler(html => {
         if (html) {
           window.__repSampleHtml = html;
-          document.getElementById("rep_output").innerHTML = html;
+          fsReport_setPreviewHtml(html);
         }
       })
       .withFailureHandler(() => {
-        document.getElementById("rep_output").textContent =
-          "Example report unavailable. Generate a report to preview.";
+        fsReport_setPreviewHtml(
+          '<span style="color:rgba(255,255,255,.55)">Example report unavailable. Generate a report to preview.</span>'
+        );
       })
       .ui_getFuturescansPreviewSample();
   };
+
+  function fsReport_getPreviewRoot(){
+    const output = document.getElementById("rep_output");
+    if (!output) return null;
+    if (!output.shadowRoot) {
+      output.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+        :host{ display:block; }
+        img{ max-width:100%; height:auto; }
+        table{ width:100% !important; max-width:100%; table-layout: fixed; }
+        td, th{ max-width:100%; }
+        .MsoNormalTable{ width:100% !important; max-width:100%; }
+        .MsoNormalTable td[width],
+        .MsoNormalTable th[width]{ width:auto !important; }
+        .MsoNormalTable img{ width:100% !important; max-width:100%; height:auto !important; }
+        a{ color: var(--link); }
+        .rep_previewInsert{
+          border: 1px dashed rgba(125,178,255,.6);
+          border-radius: 10px;
+          padding: 10px;
+          margin-bottom: 12px;
+          background: rgba(125,178,255,.08);
+          font-family: inherit;
+        }
+        .rep_previewInsert .rep_cardTitle{
+          color: #1b2a3b;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .rep_previewInsert .rep_cardMeta{
+          font-size: 11px;
+          color: var(--muted2);
+          margin-top: 6px;
+          word-break: break-all;
+        }
+      `;
+      output.shadowRoot.appendChild(style);
+    }
+    return output.shadowRoot;
+  }
+
+  function fsReport_setPreviewHtml(html){
+    const root = fsReport_getPreviewRoot();
+    if (!root) return;
+    root.querySelectorAll(":scope > :not(style)").forEach(node => node.remove());
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html || '<span style="color:rgba(255,255,255,.55)">No output returned.</span>';
+    root.appendChild(wrapper);
+  }
 
   function fsReport_wirePreviewDropZone(){
     const outputWrap = document.getElementById("rep_outputWrap");
@@ -300,13 +351,13 @@
   }
 
   function fsReport_insertPreviewCard(data){
-    const output = document.getElementById("rep_output");
-    if (!output) return;
-    let container = output.querySelector("#rep_previewCards");
+    const root = fsReport_getPreviewRoot();
+    if (!root) return;
+    let container = root.querySelector("#rep_previewCards");
     if (!container) {
       container = document.createElement("div");
       container.id = "rep_previewCards";
-      output.prepend(container);
+      root.prepend(container);
     }
 
     const card = document.createElement("div");
@@ -388,10 +439,9 @@
     document.getElementById("rep_linksInput").value = "";
     fsReport_renderApprovedCards([]);
     if (window.__repSampleHtml) {
-      document.getElementById("rep_output").innerHTML = window.__repSampleHtml;
+      fsReport_setPreviewHtml(window.__repSampleHtml);
     } else {
-      document.getElementById("rep_output").innerHTML =
-        '<span style="color:rgba(255,255,255,.55)">Cleared.</span>';
+      fsReport_setPreviewHtml('<span style="color:rgba(255,255,255,.55)">Cleared.</span>');
     }
     fsReport_setBusy(false, "Ready.");
   }
@@ -408,8 +458,7 @@
 
     google.script.run
       .withSuccessHandler(html => {
-        document.getElementById("rep_output").innerHTML =
-          html || '<span style="color:rgba(255,255,255,.55)">No output returned.</span>';
+        fsReport_setPreviewHtml(html);
         fsReport_setOk("Report generated.");
         fsReport_setBusy(false);
       })
