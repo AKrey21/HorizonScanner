@@ -310,6 +310,8 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
 
     const attachmentLabel = hasPdf ? (pdfName || `Article ${topicNo} - ${t.title || "Untitled"}.pdf`) : "";
 
+    const fallbackImgSrc = t.imageUrl || "";
+
     tplTopics.push({
       topicNo,
       sectionTitle,
@@ -319,7 +321,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
       summaryHtml: sanitizeHtmlBasic_(t.summaryHtml || ""),
       articleUrl: t.articleUrl || "#",
       imgCid,
-      imgSrc: imgCid ? `cid:${imgCid}` : "",
+      imgSrc: imgCid ? `cid:${imgCid}` : fallbackImgSrc,
       hasPdf,
       attachmentLabel,
       pdfError
