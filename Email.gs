@@ -79,7 +79,7 @@ function enforceFsTypography_(html) {
  * ========================================================================= */
 
 function buildFuturescansEmailHtml_v1_(topics, weekLabel) {
-  const headerImgUrl = ""; // optional external header image
+  const headerImgUrl = getBannerDataUri_(); // optional base64 header image
 
   const intro =
     "FutureScans@MOM is a weekly collection of articles covering topics relevant to MOM’s work, curated by SPTD. " +
@@ -124,8 +124,7 @@ function buildFuturescansEmailHtml_v1_(topics, weekLabel) {
 function renderEmailTopicBlock_v1_(t) {
   const topicNo = t.topicNo || 1;
 
-  // Topic 2 orange, others blue
-  const barColor = (topicNo === 2) ? "#F57C00" : "#0D47A1";
+  const barColor = (topicNo % 2 === 0) ? "#FF7300" : "#002A7B";
   const linkStyle = "color:#1a73e8;text-decoration:underline;";
 
   const imgCell = t.imageUrl
@@ -143,7 +142,7 @@ function renderEmailTopicBlock_v1_(t) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e6e6e6;border-radius:12px;overflow:hidden;margin:14px 0;">
     <tr>
       <td style="background:${barColor};color:#fff;font-weight:700;padding:8px 12px;font-family:${FS_FONT_STACK};font-size:${FS_SECTION_PT};">
-        &lt;Topic ${topicNo}&gt;
+        &lt;Topic&gt;
       </td>
     </tr>
 
@@ -249,7 +248,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   (topics || []).forEach((t, i) => {
     const topicNo = t.topicNo || (i + 1);
     const sectionTitle = t.sectionTitle || sectionLabels[i] || `Topic ${topicNo}`;
-    const barColor = (topicNo === 2) ? "#FF7300" : "#002A7B";
+    const barColor = (topicNo % 2 === 0) ? "#FF7300" : "#002A7B";
 
     // Topic image -> CID
     let imgCid = "";
@@ -364,7 +363,7 @@ function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
   const tplTopics = (topics || []).map((t, i) => {
     const topicNo = t.topicNo || (i + 1);
     const sectionTitle = t.sectionTitle || sectionLabels[i] || `Topic ${topicNo}`;
-    const barColor = (topicNo === 2) ? "#FF7300" : "#002A7B";
+    const barColor = (topicNo % 2 === 0) ? "#FF7300" : "#002A7B";
     const attachmentLabel = t.attachmentLabel ||
       `Article ${topicNo} – ${(t.title || "Untitled").slice(0, 40)}.pdf`;
 
