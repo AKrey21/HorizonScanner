@@ -75,8 +75,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
             Fetch article text
           </label>
           <div class="row" style="grid-template-columns: 120px 1fr; margin:0;">
-            <label>Max</label>
-            <input id="llmMax" type="text" placeholder="20">
+            <label>Top N</label>
+            <input id="llmMax" type="text" placeholder="10">
           </div>
           <button class="btn" onclick="picks_fillDefaultPrompt()">Use default prompt</button>
           <button class="btn" onclick="picks_clearLlm()">Clear LLM</button>
@@ -574,7 +574,9 @@ Highlight policy levers and workforce risks for 2025-2030.'
           var tokenNote = tokenEstimate ? " - est tokens: " + tokenEstimate : "";
           var errPreview = errCount ? " - first errors: " + errList.slice(0, 3).join(" | ") : "";
           var resultCount = res && res.results ? res.results.length : 0;
-          var msg = "LLM ranking complete (" + resultCount + " scored from raw articles)" +
+          var totalScored = res && res.meta ? Number(res.meta.scored_total || res.meta.total_rows || 0) : 0;
+          var totalLabel = totalScored || resultCount;
+          var msg = "LLM ranking complete (top " + resultCount + " of " + totalLabel + " scored from raw articles)" +
             tokenNote +
             (errCount ? " - " + errCount + " errors" : "") +
             errPreview;
