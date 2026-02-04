@@ -33,6 +33,7 @@ function ui_getFuturescansPreviewSample() {
   const topics = [
     {
       topicNo: 1,
+      sectionTitle: "<Topic>",
       title: "[Title]",
       relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
       summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
@@ -42,6 +43,7 @@ function ui_getFuturescansPreviewSample() {
     },
     {
       topicNo: 2,
+      sectionTitle: "<Topic>",
       title: "[Title]",
       relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
       summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
@@ -51,6 +53,7 @@ function ui_getFuturescansPreviewSample() {
     },
     {
       topicNo: 3,
+      sectionTitle: "<Topic>",
       title: "[Title]",
       relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
       summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
@@ -60,6 +63,7 @@ function ui_getFuturescansPreviewSample() {
     },
     {
       topicNo: 4,
+      sectionTitle: "<Topic>",
       title: "[Title]",
       relevance20: "&lt;How are these topics or issues relevant to Singapore or MOM, 20 words&gt;",
       summaryHtml: "[AI-generated summary with 1-2 key points bolded, 80 words]",
