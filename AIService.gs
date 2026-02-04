@@ -1,18 +1,51 @@
 /**************************************
- * AIService.gs — Gemini helpers + AI scoring config generator
+ * AIService.gs — AI helpers + AI scoring config generator
  *
  * What this file includes:
- * 1) geminiGenerateText_() — generic Gemini caller (optionally schema-enforced JSON)
- * 2) geminiGenerateJson_() — legacy helper (returns JSON text)
- * 3) ui_generateScoringConfigFromAI_v1() — UI endpoint for config generation
- * 4) ai_generateScoringConfig_() + full sanitiser + helpers
+ * 1) aiGenerateText_() — provider-aware caller (Gemini/OpenAI)
+ * 2) geminiGenerateText_() — direct Gemini caller (optionally schema-enforced JSON)
+ * 3) openaiGenerateText_() — direct OpenAI caller (optionally schema-enforced JSON)
+ * 4) aiGenerateJson_() — helper for JSON responses
+ * 5) ui_generateScoringConfigFromAI_v1() — UI endpoint for config generation
+ * 6) ai_generateScoringConfig_() + full sanitiser + helpers
  *
  * Dependencies expected elsewhere in your project:
  * - sc_getConfigSafe_()   (returns baseline config object)
  * - CONTROL_SHEET constant (e.g. "ThemeRules")
  **************************************/
 
-const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
+const AI_PROVIDER_DEFAULT = "gemini";
+const AI_DEFAULT_MAX_OUTPUT_TOKENS = 600; // conservative default
+const GEMINI_DEFAULT_MODEL = "gemini-1.5-flash";
+const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
+
+function getAiProvider_() {
+  const raw = PropertiesService.getScriptProperties().getProperty("AI_PROVIDER");
+  const provider = String(raw || AI_PROVIDER_DEFAULT).trim().toLowerCase();
+  return (provider === "openai") ? "openai" : "gemini";
+}
+
+function getAiModel_(provider, overrideModel) {
+  if (overrideModel) return overrideModel;
+  const props = PropertiesService.getScriptProperties();
+  const shared = props.getProperty("AI_MODEL");
+  const providerKey = (provider === "openai") ? "OPENAI_MODEL" : "GEMINI_MODEL";
+  const providerModel = props.getProperty(providerKey);
+  if (providerModel) return providerModel;
+  if (shared) return shared;
+  return (provider === "openai") ? OPENAI_DEFAULT_MODEL : GEMINI_DEFAULT_MODEL;
+}
+
+function getAiMaxOutputTokens_(requested) {
+  const props = PropertiesService.getScriptProperties();
+  const capRaw = Number(props.getProperty("AI_MAX_OUTPUT_TOKENS"));
+  const cap = Number.isFinite(capRaw) ? capRaw : null;
+  const fallback = AI_DEFAULT_MAX_OUTPUT_TOKENS;
+  let value = (requested != null) ? Number(requested) : fallback;
+  if (!Number.isFinite(value)) value = fallback;
+  if (cap && value > cap) value = cap;
+  return Math.max(1, Math.round(value));
+}
 
 /* =========================
  * Gemini helpers
@@ -21,6 +54,12 @@ const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
 function getGeminiApiKey_() {
   const key = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
   if (!key) throw new Error('Missing Script Property "GEMINI_API_KEY".');
+  return key;
+}
+
+function getOpenAiApiKey_() {
+  const key = PropertiesService.getScriptProperties().getProperty("OPENAI_API_KEY");
+  if (!key) throw new Error('Missing Script Property "OPENAI_API_KEY".');
   return key;
 }
 
@@ -37,13 +76,13 @@ function getGeminiApiKey_() {
  */
 function geminiGenerateText_(prompt, opts) {
   opts = opts || {};
-  const model = opts.model || GEMINI_DEFAULT_MODEL;
+  const model = getAiModel_("gemini", opts.model);
 
   const payload = {
     contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }],
     generationConfig: {
       temperature: (opts.temperature != null) ? opts.temperature : 0.4,
-      maxOutputTokens: (opts.maxOutputTokens != null) ? opts.maxOutputTokens : 900,
+      maxOutputTokens: getAiMaxOutputTokens_(opts.maxOutputTokens),
       responseMimeType: opts.responseMimeType,
       responseSchema: opts.responseSchema
     }
@@ -74,6 +113,70 @@ function geminiGenerateText_(prompt, opts) {
 }
 
 /**
+ * Generic OpenAI call.
+ * Returns model text response (string).
+ *
+ * opts:
+ * - model (string) default OPENAI_DEFAULT_MODEL
+ * - temperature (number)
+ * - maxOutputTokens (int)
+ * - responseMimeType ("application/json" etc)
+ * - responseSchema (object) — JSON schema if responseMimeType is application/json
+ */
+function openaiGenerateText_(prompt, opts) {
+  opts = opts || {};
+  const model = getAiModel_("openai", opts.model);
+  const responseFormat = (opts.responseMimeType === "application/json")
+    ? (opts.responseSchema
+        ? { type: "json_schema", json_schema: { name: "response", schema: opts.responseSchema, strict: true } }
+        : { type: "json_object" })
+    : undefined;
+
+  const payload = {
+    model,
+    input: [
+      { role: "user", content: [{ type: "text", text: String(prompt || "") }] }
+    ],
+    temperature: (opts.temperature != null) ? opts.temperature : 0.4,
+    max_output_tokens: getAiMaxOutputTokens_(opts.maxOutputTokens),
+    response_format: responseFormat
+  };
+
+  if (!payload.response_format) delete payload.response_format;
+
+  const res = UrlFetchApp.fetch("https://api.openai.com/v1/responses", {
+    method: "post",
+    contentType: "application/json",
+    headers: { "Authorization": "Bearer " + getOpenAiApiKey_() },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  const code = res.getResponseCode();
+  const body = res.getContentText();
+  if (code >= 300) throw new Error(`OpenAI error ${code}: ${body}`);
+
+  const json = JSON.parse(body);
+  if (json && typeof json.output_text === "string") return json.output_text;
+
+  const output = Array.isArray(json?.output) ? json.output : [];
+  const content = output.flatMap(o => Array.isArray(o?.content) ? o.content : []);
+  const text = content.map(c => c?.text || "").join("");
+  return text || "";
+}
+
+/**
+ * Provider-aware AI call.
+ * Returns model text response (string).
+ */
+function aiGenerateText_(prompt, opts) {
+  opts = opts || {};
+  const provider = String(opts.provider || getAiProvider_()).toLowerCase();
+  if (provider === "openai") return openaiGenerateText_(prompt, opts);
+  return geminiGenerateText_(prompt, opts);
+}
+
+/**
  * Legacy helper (compatible with your old gemini.gs usage pattern):
  * Returns JSON text (string). Does NOT parse it for you.
  */
@@ -83,6 +186,21 @@ function geminiGenerateJson_(prompt, modelOpt) {
     temperature: 0.4,
     maxOutputTokens: 700,
     responseMimeType: "application/json"
+  });
+}
+
+/**
+ * Provider-aware JSON helper:
+ * Returns JSON text (string). Does NOT parse it for you.
+ */
+function aiGenerateJson_(prompt, opts) {
+  opts = opts || {};
+  return aiGenerateText_(prompt, {
+    model: opts.model,
+    temperature: (opts.temperature != null) ? opts.temperature : 0.4,
+    maxOutputTokens: (opts.maxOutputTokens != null) ? opts.maxOutputTokens : 700,
+    responseMimeType: "application/json",
+    responseSchema: opts.responseSchema
   });
 }
 
@@ -188,10 +306,9 @@ function ai_generateScoringConfig_(userPrompt, existingCfg, taxonomy) {
     String(userPrompt || "").trim()
   ].join("\n");
 
-  const outText = geminiGenerateText_(system + "\n\n" + context, {
-    model: "gemini-2.5-flash",
+  const outText = aiGenerateText_(system + "\n\n" + context, {
     temperature: 0.2,
-    maxOutputTokens: 1200,
+    maxOutputTokens: 800,
     responseMimeType: "application/json",
     responseSchema: schema
   });

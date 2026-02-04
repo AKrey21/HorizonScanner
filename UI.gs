@@ -233,8 +233,7 @@ function ui_addThemeRule() {
 
 /** ====== RSS Feeds (simple UI, previously UI_Feeds.gs) ====== */
 
-// Model used for Gemini suggestions
-const GEMINI_MODEL_ID = "gemini-2.5-flash";
+// Model used for AI suggestions is controlled via Script Properties (AI_PROVIDER / AI_MODEL)
 
 /** Return feeds for UI list */
 function ui_getFeeds_v1() {
@@ -323,9 +322,9 @@ function ui_geminiSuggestFeeds_v1(homepageOrPrompt) {
     return Array.from(new Set(deterministic)).slice(0, 10);
   }
 
-  // Require AIService gemini helper
-  if (typeof geminiGenerateText_ !== "function") {
-    throw new Error("Missing geminiGenerateText_(). Add/keep AIService.gs.");
+  // Require AIService helper
+  if (typeof aiGenerateText_ !== "function") {
+    throw new Error("Missing aiGenerateText_(). Add/keep AIService.gs.");
   }
 
   const prompt =
@@ -343,8 +342,7 @@ Rules:
   https://news.google.com/rss/search?q=site:DOMAIN&hl=en-SG&gl=SG&ceid=SG:en
 - return at most 10 feeds.`;
 
-  const text = geminiGenerateText_(prompt, {
-    model: GEMINI_MODEL_ID,
+  const text = aiGenerateText_(prompt, {
     temperature: 0.2,
     maxOutputTokens: 512,
     responseMimeType: "application/json"
