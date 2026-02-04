@@ -690,13 +690,49 @@ function tryFetchImageBlob_(imgUrl) {
     if (code < 200 || code >= 300) return null;
 
     const blob = res.getBlob();
+    const contentType = String(blob.getContentType() || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return null;
+
     const bytes = blob.getBytes();
-    if (bytes && bytes.length > 1200 * 1024) return null;
+    if (bytes && bytes.length > 2000 * 1024) return null;
 
     return blob;
   } catch (e) {
+    // fall through to proxy
+  }
+
+  try {
+    const proxyUrl = buildImageProxyUrl_(imgUrl);
+    if (!proxyUrl) return null;
+
+    const resp = UrlFetchApp.fetch(proxyUrl, {
+      followRedirects: true,
+      muteHttpExceptions: true,
+      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 15000
+    });
+
+    const code = resp.getResponseCode();
+    if (code < 200 || code >= 300) return null;
+
+    const blob = resp.getBlob();
+    const contentType = String(blob.getContentType() || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return null;
+
+    const bytes = blob.getBytes();
+    if (bytes && bytes.length > 2000 * 1024) return null;
+
+    return blob;
+  } catch (e2) {
     return null;
   }
+}
+
+function buildImageProxyUrl_(url) {
+  const clean = String(url || "").trim();
+  if (!clean) return "";
+  const encoded = encodeURIComponent(clean);
+  return `https://images.weserv.nl/?url=${encoded}&output=jpg`;
 }
 
 /* =========================================================================
