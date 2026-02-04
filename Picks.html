@@ -270,7 +270,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     if (useBaseline) {
       baselineJsonText = document.getElementById("cfg_json")?.value || "";
       if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
-        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.");
+        picks_setAiStatus('Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.');
         return;
       }
     }
@@ -293,7 +293,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
           const ta = document.getElementById("cfg_json");
           if (ta) ta.value = res.jsonText;
 
-          picks_setAiStatus("Generated  Review the JSON, then click "Save JSON".");
+          picks_setAiStatus('Generated  Review the JSON, then click "Save JSON".');
         } catch (err) {
           console.error(err);
           picks_setAiStatus("UI error: " + (err.message || err));
