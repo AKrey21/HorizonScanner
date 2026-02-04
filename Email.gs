@@ -398,7 +398,7 @@ function buildPreviewBannerDataUrl_() {
 
   const bannerId = getFsBannerFileId_();
   if (bannerId) {
-    return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(bannerId)}`;
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(bannerId)}&sz=w2000`;
   }
 
   const svg =
