@@ -487,12 +487,15 @@ Highlight policy levers and workforce risks for 2025–2030.'
           PICKS_LLM_META = res.meta || { prompt };
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
-          const errCount = Array.isArray(res.errors) ? res.errors.length : 0;
+          const errList = Array.isArray(res.errors) ? res.errors : [];
+          const errCount = errList.length;
           const tokenEstimate = res?.meta?.tokens_estimate;
           const tokenNote = tokenEstimate ? ` — est tokens: ${tokenEstimate}` : "";
+          const errPreview = errCount ? ` — first errors: ${errList.slice(0, 3).join(" | ")}` : "";
           const msg = `LLM ranking complete (${res.results?.length || 0} scored from raw articles)` +
             tokenNote +
-            (errCount ? ` — ${errCount} errors (see Apps Script logs)` : "");
+            (errCount ? ` — ${errCount} errors` : "") +
+            errPreview;
           picks_setLlmStatus(msg);
         } catch (err) {
           console.error(err);
