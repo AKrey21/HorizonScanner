@@ -385,12 +385,20 @@ function buildPreviewBannerDataUrl_() {
   try {
     const bannerBlob = getFsBannerBlob_();
     if (bannerBlob) {
-      const mime = bannerBlob.getContentType() || "image/jpeg";
+      let mime = bannerBlob.getContentType() || "image/jpeg";
+      if (!mime || mime === "application/octet-stream" || !/^image\//i.test(mime)) {
+        mime = "image/jpeg";
+      }
       const b64 = Utilities.base64Encode(bannerBlob.getBytes());
       return `data:${mime};base64,${b64}`;
     }
   } catch (e) {
     // fall back to placeholder banner
+  }
+
+  const bannerId = getFsBannerFileId_();
+  if (bannerId) {
+    return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(bannerId)}`;
   }
 
   const svg =
