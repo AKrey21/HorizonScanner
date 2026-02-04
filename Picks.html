@@ -461,20 +461,6 @@ Highlight policy levers and workforce risks for 2025–2030.'
     return link || title;
   }
 
-  function picks_collectLlmInputRows(maxRows) {
-    const limit = Math.max(1, Math.min(60, Number(maxRows || 20)));
-    return PICKS_ROWS.slice(0, limit).map(r => ({
-      key: picks_buildLlmKey(r),
-      title: picks_getField(r, ["Title", "title"]),
-      link: picks_getField(r, ["Link", "URL", "Url", "link", "url"]),
-      date: picks_getField(r, ["Date", "date"]),
-      source: picks_getField(r, ["Source", "source"]),
-      theme: picks_getField(r, ["Theme", "theme"]),
-      poi: picks_getField(r, ["POI", "Poi", "Point of Interest", "poi"]),
-      snippet: picks_getField(r, ["DescriptionSnippet", "Description Snippet", "Snippet", "snippet"])
-    }));
-  }
-
   function picks_runLlmRank() {
     const prompt = (document.getElementById("llmPrompt")?.value || "").trim();
     if (!prompt) {
@@ -484,10 +470,8 @@ Highlight policy levers and workforce risks for 2025–2030.'
 
     const maxRows = Number((document.getElementById("llmMax")?.value || "").trim() || 20);
     const fetchText = !!document.getElementById("llmFetch")?.checked;
-    const rows = picks_collectLlmInputRows(maxRows);
-
     picks_setLlmBusy(true);
-    picks_setLlmStatus(`Ranking ${rows.length} articles...`);
+    picks_setLlmStatus("Ranking raw articles...");
 
     google.script.run
       .withSuccessHandler(res => {
@@ -506,7 +490,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
           const errCount = Array.isArray(res.errors) ? res.errors.length : 0;
           const tokenEstimate = res?.meta?.tokens_estimate;
           const tokenNote = tokenEstimate ? ` — est tokens: ${tokenEstimate}` : "";
-          const msg = `LLM ranking complete (${res.results?.length || 0} scored)` +
+          const msg = `LLM ranking complete (${res.results?.length || 0} scored from raw articles)` +
             tokenNote +
             (errCount ? ` — ${errCount} errors (see Apps Script logs)` : "");
           picks_setLlmStatus(msg);
@@ -522,7 +506,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
         picks_setLlmStatus("LLM rank failed: " + (e.message || e));
         picks_setLlmBusy(false);
       })
-      .ui_runWeeklyPicksLlmRank_v1({ prompt, maxRows, fetchText, rows });
+      .ui_runRawArticlesLlmRank_v2({ prompt, maxRows, fetchText });
   }
 
   function picks_clearLlm() {
