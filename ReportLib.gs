@@ -423,7 +423,7 @@ function generateAiBits_(article, themeLabel) {
   const sourceText = cleanForModel_(rawSource).slice(0, 9000);
   const theme = String(themeLabel || "").trim();
 
-  if (!sourceText || sourceText.length < 80) {
+  if (!sourceText || sourceText.length < 80 || isBlockedArticleText_(sourceText)) {
     return fallbackAi_(article);
   }
 
@@ -478,6 +478,7 @@ Rules:
   if (!summary80) summary80 = safeTextSnippet_(article.description || article.text || "", 420);
 
   let summaryHtml = escapeHtml_(summary80);
+  summaryHtml = summaryHtml.replace(/\*{2}([^*]+)\*{2}/g, "<b>$1</b>");
 
   phrases.forEach(p => {
     const phrase = String(p || "").trim();
@@ -490,6 +491,17 @@ Rules:
   });
 
   return { relevance20, summaryHtml };
+}
+
+function isBlockedArticleText_(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  if (t.includes("just a moment") && t.includes("enable javascript")) return true;
+  if (t.includes("access denied")) return true;
+  if (t.includes("cloudflare")) return true;
+  if (t.includes("captcha")) return true;
+  if (t.includes("verify you are human")) return true;
+  return false;
 }
 
 /* =========================================================================
