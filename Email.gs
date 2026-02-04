@@ -12,18 +12,22 @@
  *   but we CAPTURE + LOG the PDF error so you can see what failed.
  *
  * Banner:
- * - NO Base64
- * - NO BannerConfig.gs
- * - Banner is a Drive file (by ID) attached as CID "fs_banner"
+ * - If FS_BANNER_DATA_URI is set, use it directly (data URI base64) for preview + final email.
+ * - Otherwise banner is a Drive file (by ID) attached as CID "fs_banner"
  * - Falls back to newest image in FS_BANNER_FOLDER_ID if ID is missing/invalid
  * - Resolves Drive shortcuts and can use thumbnails for non-image Drive types
- * - EmailTemplateBody.html should reference it as: <img src="cid:fs_banner" ...>
+ * - EmailTemplateBody.html should reference it as: <img src="<?= bannerSrc ?>" ...>
  ******************************/
 
 // Optional: where to save generated .eml drafts (Drive folder)
 const EML_OUTPUT_FOLDER_ID = "PASTE_EML_OUTPUT_FOLDER_ID_HERE"; // optional
 
-// ===== FutureScans banner (Drive asset) =====
+// ===== FutureScans banner (data URI OR Drive asset) =====
+// Paste your base64 data URI below to embed the banner in preview + final email.
+// Example: const FS_BANNER_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAA...";
+const FS_BANNER_DATA_URI = "";
+
+// Drive fallback (used only when FS_BANNER_DATA_URI is empty)
 const FS_BANNER_FILE_ID = "13g5m1yI6V5Fcjvl57aEUZcHYq1lfnk6g"; // Banner.jpg in Drive
 const FS_BANNER_FOLDER_ID = "1yuFMdayHpj9UB2qM14CORFii6LUCVJxp"; // Banner folder in Drive
 
@@ -183,8 +187,9 @@ function renderEmailTopicBlock_v1_(t) {
  *  - Captures + logs PDF errors per-topic instead of silently skipping
  *
  * Banner:
- *  - attached from Drive ID as CID "fs_banner"
- *  - EmailTemplateBody.html should reference <img src="cid:fs_banner" ...>
+ *  - If FS_BANNER_DATA_URI is set, use it directly in HTML.
+ *  - Otherwise attached from Drive ID as CID "fs_banner"
+ *  - EmailTemplateBody.html should reference <img src="<?= bannerSrc ?>" ...>
  * ========================================================================= */
 
 function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
@@ -209,23 +214,26 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   const inlineImages = [];
   const attachments = []; // PDFs live here
 
-  // ---- Banner (Drive asset → CID) ----
-  // Always attach banner, and force JPG mime so Outlook renders it reliably.
-  try {
-    let bannerBlob = getFsBannerBlob_();
-    if (!bannerBlob) throw new Error("No banner file found.");
-    // Force correct metadata (Drive sometimes returns application/octet-stream)
-    bannerBlob = bannerBlob
-      .setName("fs_banner.jpg")
-      .setContentType("image/jpeg");
+  const bannerDataUri = getBannerDataUri_();
+  if (!bannerDataUri) {
+    // ---- Banner (Drive asset → CID) ----
+    // Always attach banner, and force JPG mime so Outlook renders it reliably.
+    try {
+      let bannerBlob = getFsBannerBlob_();
+      if (!bannerBlob) throw new Error("No banner file found.");
+      // Force correct metadata (Drive sometimes returns application/octet-stream)
+      bannerBlob = bannerBlob
+        .setName("fs_banner.jpg")
+        .setContentType("image/jpeg");
 
-    inlineImages.push({
-      cid: "fs_banner",
-      blob: bannerBlob,
-      filename: "fs_banner" // ext added later by guessExtFromMime_
-    });
-  } catch (e) {
-    Logger.log("[BANNER] Failed to attach banner: " + formatErr_(e));
+      inlineImages.push({
+        cid: "fs_banner",
+        blob: bannerBlob,
+        filename: "fs_banner" // ext added later by guessExtFromMime_
+      });
+    } catch (e) {
+      Logger.log("[BANNER] Failed to attach banner: " + formatErr_(e));
+    }
   }
 
   // ---- Section labels for template ----
@@ -322,7 +330,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   // ---- Render EmailTemplateBody.html as Apps Script Template ----
   const tpl = HtmlService.createTemplateFromFile("EmailTemplateBody");
   tpl.weekOf = weekLabel;
-  tpl.bannerSrc = "cid:fs_banner";
+  tpl.bannerSrc = bannerDataUri || "cid:fs_banner";
   tpl.topics = tplTopics;
 
   // ✅ Post-process safety net (prevents Calibri + enforces 11/12pt if needed)
@@ -382,6 +390,15 @@ function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
 }
 
 function buildPreviewBannerDataUrl_() {
+  return getBannerDataUri_();
+}
+
+function getBannerDataUri_() {
+  const inline = (FS_BANNER_DATA_URI || "").trim();
+  if (inline) {
+    return inline;
+  }
+
   const scriptBanner = PropertiesService.getScriptProperties().getProperty("FS_BANNER_DATA_URI");
   if (scriptBanner) {
     return scriptBanner;
