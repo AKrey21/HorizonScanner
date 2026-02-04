@@ -180,12 +180,12 @@ Highlight policy levers and workforce risks for 2025-2030.'
 </style>
 
 <script>
-  let PICKS_ROWS = [];
-  let PICKS_HEADERS = [];
-  let PICKS_META = {};
-  let PICKS_LLM_RESULTS = {};
-  let PICKS_LLM_META = null;
-  const PICKS_LLM_DEFAULT_PROMPT =
+  var PICKS_ROWS = [];
+  var PICKS_HEADERS = [];
+  var PICKS_META = {};
+  var PICKS_LLM_RESULTS = {};
+  var PICKS_LLM_META = null;
+  var PICKS_LLM_DEFAULT_PROMPT =
     "Identify the best FutureScans weekly articles to feature. " +
     "Prioritise strong policy/operational levers, credible evidence, and forward-looking workforce/workplace implications " +
     "with clear relevance to Singapore/MOM, using existing Theme/POI labels.";
@@ -195,9 +195,9 @@ Highlight policy levers and workforce risks for 2025-2030.'
     picks_refresh();
     picks_fillDefaultPrompt();
 
-    const p = document.getElementById("aiPrompt");
+    var p = document.getElementById("aiPrompt");
     if (p) {
-      p.addEventListener("keydown", (ev) => {
+      p.addEventListener("keydown", function (ev) {
         if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
           ev.preventDefault();
           picks_generateConfigAI();
@@ -207,24 +207,24 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_setStatus(msg) {
-    const el = document.getElementById("cfg_status");
+    var el = document.getElementById("cfg_status");
     if (el) el.textContent = msg || "";
   }
 
   function picks_setAiStatus(msg) {
-    const el = document.getElementById("ai_status");
+    var el = document.getElementById("ai_status");
     if (el) el.textContent = msg || "";
   }
 
   function picks_setLlmStatus(msg) {
-    const el = document.getElementById("llm_status");
+    var el = document.getElementById("llm_status");
     if (el) el.textContent = msg || "";
   }
 
   function picks_setAiBusy(isBusy) {
-    const btn = document.getElementById("btn_aiGen");
-    const inp = document.getElementById("aiPrompt");
-    const chk = document.getElementById("aiUseBaseline");
+    var btn = document.getElementById("btn_aiGen");
+    var inp = document.getElementById("aiPrompt");
+    var chk = document.getElementById("aiUseBaseline");
     if (btn) btn.disabled = !!isBusy;
     if (inp) inp.disabled = !!isBusy;
     if (chk) chk.disabled = !!isBusy;
@@ -232,10 +232,10 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_setLlmBusy(isBusy) {
-    const btn = document.getElementById("btn_llmRun");
-    const inp = document.getElementById("llmPrompt");
-    const chk = document.getElementById("llmFetch");
-    const max = document.getElementById("llmMax");
+    var btn = document.getElementById("btn_llmRun");
+    var inp = document.getElementById("llmPrompt");
+    var chk = document.getElementById("llmFetch");
+    var max = document.getElementById("llmMax");
     if (btn) btn.disabled = !!isBusy;
     if (inp) inp.disabled = !!isBusy;
     if (chk) chk.disabled = !!isBusy;
@@ -244,14 +244,14 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_fillDefaultPrompt() {
-    const promptEl = document.getElementById("llmPrompt");
+    var promptEl = document.getElementById("llmPrompt");
     if (promptEl && !promptEl.value.trim()) {
       promptEl.value = PICKS_LLM_DEFAULT_PROMPT;
     }
   }
 
   function picks_clearPrompt() {
-    const p = document.getElementById("aiPrompt");
+    var p = document.getElementById("aiPrompt");
     if (p) p.value = "";
     picks_setAiStatus("");
   }
@@ -261,15 +261,15 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_generateConfigAI() {
-    const promptEl = document.getElementById("aiPrompt");
-    const userPrompt = (promptEl ? promptEl.value : "").trim();
+    var promptEl = document.getElementById("aiPrompt");
+    var userPrompt = (promptEl ? promptEl.value : "").trim();
 
-    const baselineEl = document.getElementById("aiUseBaseline");
-    const useBaseline = !!(baselineEl && baselineEl.checked);
+    var baselineEl = document.getElementById("aiUseBaseline");
+    var useBaseline = !!(baselineEl && baselineEl.checked);
 
-    let baselineJsonText = "";
+    var baselineJsonText = "";
     if (useBaseline) {
-      const cfgEl = document.getElementById("cfg_json");
+      var cfgEl = document.getElementById("cfg_json");
       baselineJsonText = (cfgEl && cfgEl.value) || "";
       if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
         picks_setAiStatus('Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.');
@@ -281,7 +281,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     picks_setAiStatus("Calling Gemini to generate a scoring config...");
 
     google.script.run
-      .withSuccessHandler(res => {
+      .withSuccessHandler(function (res) {
         try {
           if (!res || res.ok !== true || !res.jsonText) {
             picks_setAiStatus("Gemini returned no config. Try a clearer prompt.");
@@ -292,7 +292,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
             return;
           }
 
-          const ta = document.getElementById("cfg_json");
+          var ta = document.getElementById("cfg_json");
           if (ta) ta.value = res.jsonText;
 
           picks_setAiStatus('Generated  Review the JSON, then click "Save JSON".');
@@ -303,7 +303,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
           picks_setAiBusy(false);
         }
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setAiStatus("Gemini failed: " + (e.message || e));
         picks_setAiBusy(false);
@@ -314,13 +314,13 @@ Highlight policy levers and workforce risks for 2025-2030.'
   function picks_reloadConfig() {
     picks_setStatus("Loading config...");
     google.script.run
-      .withSuccessHandler(res => {
-        const ta = document.getElementById("cfg_json");
-        const jsonText = res && res.jsonText ? res.jsonText : "";
+      .withSuccessHandler(function (res) {
+        var ta = document.getElementById("cfg_json");
+        var jsonText = res && res.jsonText ? res.jsonText : "";
         if (ta) ta.value = jsonText;
         picks_setStatus(jsonText ? "Loaded " : "Loaded, but config was empty.");
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setStatus("Load failed: " + (e.message || e));
       })
@@ -328,15 +328,15 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_saveConfig() {
-    const ta = document.getElementById("cfg_json");
-    const txt = ta ? ta.value : "";
+    var ta = document.getElementById("cfg_json");
+    var txt = ta ? ta.value : "";
     picks_setStatus("Saving...");
     google.script.run
-      .withSuccessHandler(res => {
+      .withSuccessHandler(function (res) {
         if (res && res.savedText && ta) ta.value = res.savedText;
         picks_setStatus("Saved ");
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setStatus("Save failed: " + (e.message || e));
       })
@@ -346,11 +346,11 @@ Highlight policy levers and workforce risks for 2025-2030.'
   function picks_runScoring() {
     picks_setStatus("Running scoring...");
     google.script.run
-      .withSuccessHandler(msg => {
+      .withSuccessHandler(function (msg) {
         picks_setStatus((msg || "Scoring done ") + "\nRefreshing picks...");
         picks_refresh();
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setStatus("Scoring failed: " + (e.message || e));
       })
@@ -360,20 +360,20 @@ Highlight policy levers and workforce risks for 2025-2030.'
   function picks_refresh() {
     picks_setStatus("Refreshing picks...");
     google.script.run
-      .withSuccessHandler(data => {
+      .withSuccessHandler(function (data) {
         try {
-          const safe = data || { headers: [], rows: [], meta: {} };
+          var safe = data || { headers: [], rows: [], meta: {} };
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
           PICKS_META = safe.meta || {};
-          picks_setStatus(`Refreshed  (${PICKS_ROWS.length} rows)`);
+          picks_setStatus("Refreshed  (" + PICKS_ROWS.length + " rows)");
           picks_loadLlmCache();
         } catch (err) {
           console.error(err);
           picks_setStatus("Render failed: " + (err.message || err));
         }
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setStatus("Refresh failed: " + (e.message || e));
       })
@@ -381,70 +381,70 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_renderFiltered() {
-    const inp = document.getElementById("filterText");
-    const q = (inp ? inp.value : "").toLowerCase();
-    const sortEl = document.getElementById("picksSort");
-    const sortMode = (sortEl && sortEl.value) || "default";
+    var inp = document.getElementById("filterText");
+    var q = (inp ? inp.value : "").toLowerCase();
+    var sortEl = document.getElementById("picksSort");
+    var sortMode = (sortEl && sortEl.value) || "default";
 
-    const rows = !q
+    var rows = !q
       ? PICKS_ROWS
-      : PICKS_ROWS.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+      : PICKS_ROWS.filter(function (r) { return JSON.stringify(r).toLowerCase().includes(q); });
 
-    const wrap = document.getElementById("picks_tableWrap");
+    var wrap = document.getElementById("picks_tableWrap");
     if (!wrap) return;
 
-    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
-    const recommendedRows = useLlm
-      ? rows.filter(r => picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended)
+    var useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    var recommendedRows = useLlm
+      ? rows.filter(function (r) { return picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended; })
       : rows;
-    const displayRows = useLlm ? recommendedRows : rows;
+    var displayRows = useLlm ? recommendedRows : rows;
 
     if (!displayRows.length) {
-      const meta = PICKS_META || {};
-      const info = meta.sheetName
-        ? ` (sheet: ${escapeHtml(meta.sheetName)}, lastRow=${meta.lastRow || 0}, lastCol=${meta.lastCol || 0})`
+      var meta = PICKS_META || {};
+      var info = meta.sheetName
+        ? " (sheet: " + escapeHtml(meta.sheetName) + ", lastRow=" + (meta.lastRow || 0) + ", lastCol=" + (meta.lastCol || 0) + ")"
         : "";
-      const llmNote = useLlm ? " No recommended rows (LLM)." : "";
-      wrap.innerHTML = `<div style='padding:10px;color:#bbb'>No rows.${llmNote}${info}</div>`;
+      var llmNote = useLlm ? " No recommended rows (LLM)." : "";
+      wrap.innerHTML = "<div style='padding:10px;color:#bbb'>No rows." + llmNote + info + "</div>";
       return;
     }
 
-    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(displayRows[0]);
-    const extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
-    const finalHeaders = headers.concat(extraHeaders);
+    var headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(displayRows[0]);
+    var extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
+    var finalHeaders = headers.concat(extraHeaders);
 
-    const sortedRows = displayRows.slice();
+    var sortedRows = displayRows.slice();
     if (sortMode === "llmScoreDesc") {
-      sortedRows.sort((a, b) => {
-        const aKey = picks_buildLlmKey(a);
-        const bKey = picks_buildLlmKey(b);
-        const aScore = Number((PICKS_LLM_RESULTS[aKey] && PICKS_LLM_RESULTS[aKey].final_score) || 0);
-        const bScore = Number((PICKS_LLM_RESULTS[bKey] && PICKS_LLM_RESULTS[bKey].final_score) || 0);
+      sortedRows.sort(function (a, b) {
+        var aKey = picks_buildLlmKey(a);
+        var bKey = picks_buildLlmKey(b);
+        var aScore = Number((PICKS_LLM_RESULTS[aKey] && PICKS_LLM_RESULTS[aKey].final_score) || 0);
+        var bScore = Number((PICKS_LLM_RESULTS[bKey] && PICKS_LLM_RESULTS[bKey].final_score) || 0);
         return bScore - aScore;
       });
     }
 
-    let html = "<table><thead><tr>";
-    finalHeaders.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
+    var html = "<table><thead><tr>";
+    finalHeaders.forEach(function (h) { html += "<th>" + escapeHtml(h) + "</th>"; });
     html += "</tr></thead><tbody>";
 
-    sortedRows.forEach(r => {
+    sortedRows.forEach(function (r) {
       html += "<tr>";
-      headers.forEach(h => {
-        const v = r[h] == null ? "" : String(r[h]);
+      headers.forEach(function (h) {
+        var v = r[h] == null ? "" : String(r[h]);
         if (isLikelyUrl(v)) {
-          html += `<td><a href="${escapeAttr(v)}" target="_blank" rel="noreferrer">open</a></td>`;
+          html += "<td><a href=\"" + escapeAttr(v) + "\" target=\"_blank\" rel=\"noreferrer\">open</a></td>";
         } else {
-          html += `<td>${escapeHtml(v)}</td>`;
+          html += "<td>" + escapeHtml(v) + "</td>";
         }
       });
       if (useLlm) {
-        const key = picks_buildLlmKey(r);
-        const llm = PICKS_LLM_RESULTS[key] || {};
-        const recInfo = picks_getLlmRecInfo(llm);
-        html += `<td>${escapeHtml(llm.final_score != null ? String(llm.final_score) : "")}</td>`;
-        html += `<td><span class="llmRecBadge ${recInfo.className}">${escapeHtml(recInfo.label)}</span></td>`;
-        html += `<td>${escapeHtml(llm.summary || "")}</td>`;
+        var key = picks_buildLlmKey(r);
+        var llm = PICKS_LLM_RESULTS[key] || {};
+        var recInfo = picks_getLlmRecInfo(llm);
+        html += "<td>" + escapeHtml(llm.final_score != null ? String(llm.final_score) : "") + "</td>";
+        html += "<td><span class=\"llmRecBadge " + recInfo.className + "\">" + escapeHtml(recInfo.label) + "</span></td>";
+        html += "<td>" + escapeHtml(llm.summary || "") + "</td>";
       }
       html += "</tr>";
     });
@@ -461,31 +461,32 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   function escapeHtml(s){
     return String(s)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#039;");
   }
   function escapeAttr(s){ return escapeHtml(s); }
 
   function picks_getField(row, candidates) {
-    for (const key of candidates) {
+    for (var i = 0; i < candidates.length; i += 1) {
+      var key = candidates[i];
       if (row && row[key] != null && String(row[key]).trim()) return String(row[key]).trim();
     }
     return "";
   }
 
   function picks_buildLlmKey(row) {
-    const link = picks_getField(row, ["Link", "URL", "Url", "link", "url"]);
-    const title = picks_getField(row, ["Title", "title"]);
+    var link = picks_getField(row, ["Link", "URL", "Url", "link", "url"]);
+    var title = picks_getField(row, ["Title", "title"]);
     return link || title;
   }
 
   function picks_getLlmRecInfo(llm) {
-    const raw = String((llm && (llm.publish_recommendation || llm.recommendation)) || "").trim().toLowerCase();
-    const isYes = ["yes", "y", "publish", "feature", "recommend", "recommended", "include"].some(v => raw === v || raw.includes(v));
-    const isNo = ["no", "n", "skip", "exclude", "reject"].some(v => raw === v || raw.includes(v));
+    var raw = String((llm && (llm.publish_recommendation || llm.recommendation)) || "").trim().toLowerCase();
+    var isYes = ["yes", "y", "publish", "feature", "recommend", "recommended", "include"].some(function (v) { return raw === v || raw.indexOf(v) !== -1; });
+    var isNo = ["no", "n", "skip", "exclude", "reject"].some(function (v) { return raw === v || raw.indexOf(v) !== -1; });
     if (isYes) return { label: "Recommend", className: "llmRecBadge--yes", isRecommended: true };
     if (isNo) return { label: "Skip", className: "llmRecBadge--no", isRecommended: false };
     return { label: raw ? raw : "Unknown", className: "llmRecBadge--unknown", isRecommended: false };
@@ -493,18 +494,20 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   function picks_applyLlmResults(res, options) {
     PICKS_LLM_RESULTS = {};
-    const results = Array.isArray(res && res.results) ? res.results : [];
-    results.forEach(item => {
+    var results = Array.isArray(res && res.results) ? res.results : [];
+    results.forEach(function (item) {
       if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
     });
     PICKS_LLM_META = (res && res.meta) || null;
 
-    const hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
+    var hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
     if (!hasPicks && options && options.allowFallback) {
-      const fallbackRows = results.map(item => ({
-        Title: (item && item.title) || "",
-        Link: (item && item.url) || ""
-      }));
+      var fallbackRows = results.map(function (item) {
+        return {
+          Title: (item && item.title) || "",
+          Link: (item && item.url) || ""
+        };
+      });
       PICKS_ROWS = fallbackRows;
       PICKS_HEADERS = ["Title", "Link"];
       PICKS_META = {
@@ -517,7 +520,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   function picks_loadLlmCache() {
     google.script.run
-      .withSuccessHandler(res => {
+      .withSuccessHandler(function (res) {
         if (res && res.ok === true && Array.isArray(res.results) && res.results.length > 0) {
           picks_applyLlmResults(res, { allowFallback: true });
         } else {
@@ -527,7 +530,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
         }
         picks_renderFiltered();
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setLlmStatus("LLM cache load failed: " + (e.message || e));
         picks_renderFiltered();
@@ -536,22 +539,22 @@ Highlight policy levers and workforce risks for 2025-2030.'
   }
 
   function picks_runLlmRank() {
-    const llmPromptEl = document.getElementById("llmPrompt");
-    const prompt = ((llmPromptEl && llmPromptEl.value) || "").trim();
+    var llmPromptEl = document.getElementById("llmPrompt");
+    var prompt = ((llmPromptEl && llmPromptEl.value) || "").trim();
     if (!prompt) {
       picks_setLlmStatus("Please enter an LLM prompt.");
       return;
     }
 
-    const llmMaxEl = document.getElementById("llmMax");
-    const llmFetchEl = document.getElementById("llmFetch");
-    const maxRows = Number((((llmMaxEl && llmMaxEl.value) || "").trim() || 20));
-    const fetchText = !!(llmFetchEl && llmFetchEl.checked);
+    var llmMaxEl = document.getElementById("llmMax");
+    var llmFetchEl = document.getElementById("llmFetch");
+    var maxRows = Number((((llmMaxEl && llmMaxEl.value) || "").trim() || 20));
+    var fetchText = !!(llmFetchEl && llmFetchEl.checked);
     picks_setLlmBusy(true);
     picks_setLlmStatus("Ranking raw articles...");
 
     google.script.run
-      .withSuccessHandler(res => {
+      .withSuccessHandler(function (res) {
         try {
           if (!res || res.ok !== true) {
             picks_setLlmStatus("LLM rank failed: " + ((res && res.message) || "unknown error"));
@@ -560,15 +563,15 @@ Highlight policy levers and workforce risks for 2025-2030.'
           picks_applyLlmResults(res, { allowFallback: true });
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
-          const errList = Array.isArray(res.errors) ? res.errors : [];
-          const errCount = errList.length;
-          const tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
-          const tokenNote = tokenEstimate ? ` - est tokens: ${tokenEstimate}` : "";
-          const errPreview = errCount ? ` - first errors: ${errList.slice(0, 3).join(" | ")}` : "";
-          const resultCount = res && res.results ? res.results.length : 0;
-          const msg = `LLM ranking complete (${resultCount} scored from raw articles)` +
+          var errList = Array.isArray(res.errors) ? res.errors : [];
+          var errCount = errList.length;
+          var tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
+          var tokenNote = tokenEstimate ? " - est tokens: " + tokenEstimate : "";
+          var errPreview = errCount ? " - first errors: " + errList.slice(0, 3).join(" | ") : "";
+          var resultCount = res && res.results ? res.results.length : 0;
+          var msg = "LLM ranking complete (" + resultCount + " scored from raw articles)" +
             tokenNote +
-            (errCount ? ` - ${errCount} errors` : "") +
+            (errCount ? " - " + errCount + " errors" : "") +
             errPreview;
           picks_setLlmStatus(msg);
         } catch (err) {
@@ -578,7 +581,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
           picks_setLlmBusy(false);
         }
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setLlmStatus("LLM rank failed: " + (e.message || e));
         picks_setLlmBusy(false);
@@ -588,21 +591,21 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   function picks_clearLlm() {
     google.script.run
-      .withSuccessHandler(() => {
+      .withSuccessHandler(function () {
         PICKS_LLM_RESULTS = {};
         PICKS_LLM_META = null;
         document.getElementById("picksSort").value = "default";
         picks_setLlmStatus("LLM results cleared.");
         picks_renderFiltered();
       })
-      .withFailureHandler(e => {
+      .withFailureHandler(function (e) {
         console.error(e);
         picks_setLlmStatus("LLM clear failed: " + (e.message || e));
       })
       .ui_clearRawArticlesLlmRankCache_v1();
   }
 
-  window.addEventListener("error", (ev) => {
+  window.addEventListener("error", function (ev) {
     console.error(ev.error || ev);
     picks_setStatus("UI error: " + (ev.message || "unknown"));
   });
