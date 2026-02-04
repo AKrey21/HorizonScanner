@@ -350,11 +350,8 @@ Highlight policy levers and workforce risks for 2025–2030.'
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
           PICKS_META = safe.meta || {};
-          PICKS_LLM_RESULTS = {};
-          PICKS_LLM_META = null;
-          picks_setLlmStatus("");
-          picks_renderFiltered();
           picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
+          picks_loadLlmCache();
         } catch (err) {
           console.error(err);
           picks_setStatus("Render failed: " + (err.message || err));
@@ -461,6 +458,50 @@ Highlight policy levers and workforce risks for 2025–2030.'
     return link || title;
   }
 
+  function picks_applyLlmResults(res, options) {
+    PICKS_LLM_RESULTS = {};
+    const results = Array.isArray(res?.results) ? res.results : [];
+    results.forEach(item => {
+      if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
+    });
+    PICKS_LLM_META = res?.meta || null;
+
+    const hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
+    if (!hasPicks && options?.allowFallback) {
+      const fallbackRows = results.map(item => ({
+        Title: item?.title || "",
+        Link: item?.url || ""
+      }));
+      PICKS_ROWS = fallbackRows;
+      PICKS_HEADERS = ["Title", "Link"];
+      PICKS_META = {
+        sheetName: "Raw Articles (LLM preview)",
+        lastRow: fallbackRows.length ? fallbackRows.length + 1 : 0,
+        lastCol: PICKS_HEADERS.length
+      };
+    }
+  }
+
+  function picks_loadLlmCache() {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.ok === true && Array.isArray(res.results) && res.results.length > 0) {
+          picks_applyLlmResults(res, { allowFallback: true });
+        } else {
+          PICKS_LLM_RESULTS = {};
+          PICKS_LLM_META = null;
+          picks_setLlmStatus("");
+        }
+        picks_renderFiltered();
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setLlmStatus("LLM cache load failed: " + (e.message || e));
+        picks_renderFiltered();
+      })
+      .ui_getRawArticlesLlmRankCache_v1();
+  }
+
   function picks_runLlmRank() {
     const prompt = (document.getElementById("llmPrompt")?.value || "").trim();
     if (!prompt) {
@@ -480,11 +521,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
             picks_setLlmStatus("LLM rank failed: " + (res?.message || "unknown error"));
             return;
           }
-          PICKS_LLM_RESULTS = {};
-          (res.results || []).forEach(item => {
-            if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
-          });
-          PICKS_LLM_META = res.meta || { prompt };
+          picks_applyLlmResults(res, { allowFallback: true });
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
           const errList = Array.isArray(res.errors) ? res.errors : [];
@@ -513,11 +550,19 @@ Highlight policy levers and workforce risks for 2025–2030.'
   }
 
   function picks_clearLlm() {
-    PICKS_LLM_RESULTS = {};
-    PICKS_LLM_META = null;
-    document.getElementById("picksSort").value = "default";
-    picks_setLlmStatus("LLM results cleared.");
-    picks_renderFiltered();
+    google.script.run
+      .withSuccessHandler(() => {
+        PICKS_LLM_RESULTS = {};
+        PICKS_LLM_META = null;
+        document.getElementById("picksSort").value = "default";
+        picks_setLlmStatus("LLM results cleared.");
+        picks_renderFiltered();
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setLlmStatus("LLM clear failed: " + (e.message || e));
+      })
+      .ui_clearRawArticlesLlmRankCache_v1();
   }
 
   window.addEventListener("error", (ev) => {
