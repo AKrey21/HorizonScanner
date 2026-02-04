@@ -304,6 +304,25 @@ function ui_deleteFeed_v1(row) {
   return { ok: true };
 }
 
+/** ====== AI Settings ====== */
+
+function ui_getAiSettings_v1() {
+  const props = PropertiesService.getScriptProperties();
+  const provider = String(props.getProperty("AI_PROVIDER") || "gemini").toLowerCase();
+  const model = String(props.getProperty("AI_MODEL") || "");
+  return { provider: provider === "openai" ? "openai" : "gemini", model };
+}
+
+function ui_setAiSettings_v1(provider, model) {
+  const props = PropertiesService.getScriptProperties();
+  const nextProvider = String(provider || "").toLowerCase() === "openai" ? "openai" : "gemini";
+  const nextModel = String(model || "").trim();
+  props.setProperty("AI_PROVIDER", nextProvider);
+  if (nextModel) props.setProperty("AI_MODEL", nextModel);
+  else props.deleteProperty("AI_MODEL");
+  return { ok: true };
+}
+
 /**
  * Gemini-assisted suggestion:
  * - paste homepage URL (or any text prompt)
