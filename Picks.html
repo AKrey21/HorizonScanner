@@ -557,35 +557,58 @@ Highlight policy levers and workforce risks for 2025-2030.'
     var fetchText = !!(llmFetchEl && llmFetchEl.checked);
     picks_setLlmBusy(true);
     picks_setLlmStatus("Ranking raw articles...");
+    picks_pollLlmRank(prompt, maxRows, fetchText);
+  }
 
+  function picks_pollLlmRank(prompt, maxRows, fetchText) {
     google.script.run
       .withSuccessHandler(function (res) {
+        var keepBusy = false;
         try {
           if (!res || res.ok !== true) {
             picks_setLlmStatus("LLM rank failed: " + ((res && res.message) || "unknown error"));
+            picks_setLlmBusy(false);
             return;
           }
+
+          var errList = Array.isArray(res.errors) ? res.errors : [];
+          var errCount = errList.length;
+          var errPreview = errCount ? " - first errors: " + errList.slice(0, 3).join(" | ") : "";
+          var tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
+          var tokenNote = tokenEstimate ? " - est tokens: " + tokenEstimate : "";
+          var totalScored = res && res.meta ? Number(res.meta.scored_total || 0) : 0;
+          var totalRows = res && res.meta ? Number(res.meta.total_rows || 0) : 0;
+          var totalLabel = totalRows || totalScored || 0;
+
+          if (res.status === "in_progress") {
+            var msg = "LLM ranking in progress (" + totalScored + " of " + totalLabel + " scored)" +
+              tokenNote +
+              (errCount ? " - " + errCount + " errors" : "") +
+              errPreview;
+            picks_setLlmStatus(msg);
+            keepBusy = true;
+            setTimeout(function () {
+              picks_pollLlmRank(prompt, maxRows, fetchText);
+            }, 500);
+            return;
+          }
+
           picks_applyLlmResults(res, { allowFallback: true });
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
-          var errList = Array.isArray(res.errors) ? res.errors : [];
-          var errCount = errList.length;
-          var tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
-          var tokenNote = tokenEstimate ? " - est tokens: " + tokenEstimate : "";
-          var errPreview = errCount ? " - first errors: " + errList.slice(0, 3).join(" | ") : "";
+
           var resultCount = res && res.results ? res.results.length : 0;
-          var totalScored = res && res.meta ? Number(res.meta.scored_total || res.meta.total_rows || 0) : 0;
-          var totalLabel = totalScored || resultCount;
-          var msg = "LLM ranking complete (top " + resultCount + " of " + totalLabel + " scored from raw articles)" +
+          var totalDone = totalLabel || resultCount;
+          var doneMsg = "LLM ranking complete (top " + resultCount + " of " + totalDone + " scored from raw articles)" +
             tokenNote +
             (errCount ? " - " + errCount + " errors" : "") +
             errPreview;
-          picks_setLlmStatus(msg);
+          picks_setLlmStatus(doneMsg);
         } catch (err) {
           console.error(err);
           picks_setLlmStatus("LLM rank UI error: " + (err.message || err));
         } finally {
-          picks_setLlmBusy(false);
+          if (!keepBusy) picks_setLlmBusy(false);
         }
       })
       .withFailureHandler(function (e) {
