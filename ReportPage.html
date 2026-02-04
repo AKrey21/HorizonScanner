@@ -103,10 +103,24 @@
   #rep_output table{
     width: 100% !important;
     max-width: 100%;
+    table-layout: fixed;
   }
   #rep_output td,
   #rep_output th{
     max-width: 100%;
+  }
+  #rep_output .MsoNormalTable{
+    width: 100% !important;
+    max-width: 100%;
+  }
+  #rep_output .MsoNormalTable td[width],
+  #rep_output .MsoNormalTable th[width]{
+    width: auto !important;
+  }
+  #rep_output .MsoNormalTable img{
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
   }
   #rep_output a{ color: var(--link); }
 
