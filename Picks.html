@@ -78,6 +78,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
             <label>Max</label>
             <input id="llmMax" type="text" placeholder="20">
           </div>
+          <button class="btn" onclick="picks_fillDefaultPrompt()">Use default prompt</button>
           <button class="btn" onclick="picks_clearLlm()">Clear LLM</button>
         </div>
         <div id="llm_status" class="muted" style="margin:6px 0 10px 0;"></div>
@@ -170,10 +171,15 @@ Highlight policy levers and workforce risks for 2025–2030.'
   let PICKS_META = {};
   let PICKS_LLM_RESULTS = {};
   let PICKS_LLM_META = null;
+  const PICKS_LLM_DEFAULT_PROMPT =
+    "Identify the best FutureScans weekly articles to feature. " +
+    "Prioritise strong policy/operational levers, credible evidence, and forward-looking workforce/workplace implications " +
+    "with clear relevance to Singapore/MOM, using existing Theme/POI labels.";
 
   function __init_picks() {
     picks_reloadConfig();
     picks_refresh();
+    picks_fillDefaultPrompt();
 
     const p = document.getElementById("aiPrompt");
     if (p) {
@@ -221,6 +227,13 @@ Highlight policy levers and workforce risks for 2025–2030.'
     if (chk) chk.disabled = !!isBusy;
     if (max) max.disabled = !!isBusy;
     if (btn) btn.textContent = isBusy ? "Ranking..." : "Run LLM rank";
+  }
+
+  function picks_fillDefaultPrompt() {
+    const promptEl = document.getElementById("llmPrompt");
+    if (promptEl && !promptEl.value.trim()) {
+      promptEl.value = PICKS_LLM_DEFAULT_PROMPT;
+    }
   }
 
   function picks_clearPrompt() {
