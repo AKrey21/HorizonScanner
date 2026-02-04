@@ -93,40 +93,85 @@
     color: #000000;
     border-radius: 12px;
     min-height: 720px;
-    overflow: visible;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
   }
-  .rep_outputWrap img{ max-width:100%; height:auto; }
+  .rep_previewGrid{
+    display:grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap:12px;
+  }
+  @media (max-width: 1100px){
+    .rep_previewGrid{ grid-template-columns: 1fr; }
+  }
+  .rep_cardsPanel{
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(0,0,0,.22);
+    color: var(--text);
+    padding: 12px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    min-height: 220px;
+  }
+  .rep_cardsHeader{
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .rep_cardsList{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .rep_card{
+    border: 1px solid rgba(125,178,255,.4);
+    border-radius: 10px;
+    padding: 10px;
+    background: linear-gradient(180deg, rgba(125,178,255,.12), rgba(125,178,255,.04));
+    cursor: grab;
+  }
+  .rep_card:active{ cursor: grabbing; }
+  .rep_cardTitle{ font-size: 13px; font-weight: 600; }
+  .rep_cardMeta{ font-size: 11px; color: var(--muted2); margin-top: 6px; word-break: break-all; }
+  .rep_cardsEmpty{
+    font-size: 12px;
+    color: var(--muted);
+    padding: 8px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    text-align: center;
+  }
+  .rep_cardsHint{
+    font-size: 11px;
+    color: var(--muted2);
+  }
+  .rep_outputWrap.is-dropTarget{
+    outline: 2px dashed rgba(125,178,255,.6);
+    outline-offset: 4px;
+  }
+  .rep_previewInsert{
+    border: 1px dashed rgba(125,178,255,.6);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 12px;
+    background: rgba(125,178,255,.08);
+  }
+  .rep_previewInsert .rep_cardTitle{
+    color: #1b2a3b;
+  }
   #rep_output{
     max-width: 100%;
     word-break: break-word;
     --rep-preview-scale: 0.85;
     transform: scale(var(--rep-preview-scale));
     transform-origin: top left;
-    width: calc(100% / var(--rep-preview-scale));
+    width: 100%;
   }
-  #rep_output table{
-    width: 100% !important;
-    max-width: 100%;
-    table-layout: fixed;
-  }
-  #rep_output td,
-  #rep_output th{
-    max-width: 100%;
-  }
-  #rep_output .MsoNormalTable{
-    width: 100% !important;
-    max-width: 100%;
-  }
-  #rep_output .MsoNormalTable td[width],
-  #rep_output .MsoNormalTable th[width]{
-    width: auto !important;
-  }
-  #rep_output .MsoNormalTable img{
-    width: 100% !important;
-    max-width: 100%;
-    height: auto !important;
-  }
-  #rep_output a{ color: var(--link); }
 
   .rep_mini{ font-size:11.5px; color:var(--muted2); }
   .rep_divider{ height:1px; background: var(--border); margin: 10px 0; }
@@ -167,10 +212,19 @@
       <h2>Preview — FutureScans@MOM</h2>
       <span class="rep_mini">Full email preview</span>
     </div>
-    <div class="rep_outputWrap">
-      <div id="rep_output" class="rep_mini" style="color:var(--muted);">
-        Loading example report…
+    <div class="rep_previewGrid">
+      <div class="rep_outputWrap" id="rep_outputWrap">
+        <div id="rep_output">
+          Loading example report…
+        </div>
       </div>
+      <aside class="rep_cardsPanel">
+        <div class="rep_cardsHeader">Approved picks</div>
+        <div id="rep_cards" class="rep_cardsList">
+          <div class="rep_cardsEmpty">Generate a report to see recommended picks.</div>
+        </div>
+        <div class="rep_cardsHint">Drag a card onto the preview to stage it in the email.</div>
+      </aside>
     </div>
   </div>
 </div>
@@ -178,19 +232,162 @@
 <script>
   // optional init hook so index can call it
   window.__init_report = function(){
+    fsReport_wirePreviewDropZone();
     google.script.run
       .withSuccessHandler(html => {
         if (html) {
           window.__repSampleHtml = html;
-          document.getElementById("rep_output").innerHTML = html;
+          fsReport_setPreviewHtml(html);
         }
       })
       .withFailureHandler(() => {
-        document.getElementById("rep_output").textContent =
-          "Example report unavailable. Generate a report to preview.";
+        fsReport_setPreviewHtml("Example report unavailable. Generate a report to preview.");
       })
       .ui_getFuturescansPreviewSample();
   };
+
+  function fsReport_getPreviewRoot(){
+    const output = document.getElementById("rep_output");
+    if (!output) return null;
+    if (!output.shadowRoot) {
+      output.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+        :host{
+          display:block;
+          color: #000;
+          font-size: 12px;
+          line-height: 1.4;
+          font-family: inherit;
+        }
+        .rep_previewBody{
+          font: inherit;
+        }
+        img{ max-width:100%; height:auto; }
+        table{ width:100% !important; max-width:100%; table-layout: fixed; }
+        td, th{ max-width:100%; }
+        .MsoNormalTable{ width:100% !important; max-width:100%; }
+        .MsoNormalTable td[width],
+        .MsoNormalTable th[width]{ width:auto !important; }
+        .MsoNormalTable img{ width:100% !important; max-width:100%; height:auto !important; }
+        a{ color: var(--link); }
+        .rep_previewInsert{
+          border: 1px dashed rgba(125,178,255,.6);
+          border-radius: 10px;
+          padding: 10px;
+          margin-bottom: 12px;
+          background: rgba(125,178,255,.08);
+          font-family: inherit;
+        }
+        .rep_previewInsert .rep_cardTitle{
+          color: #1b2a3b;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .rep_previewInsert .rep_cardMeta{
+          font-size: 11px;
+          color: var(--muted2);
+          margin-top: 6px;
+          word-break: break-all;
+        }
+      `;
+      output.shadowRoot.appendChild(style);
+    }
+    return output.shadowRoot;
+  }
+
+  function fsReport_setPreviewHtml(html){
+    const root = fsReport_getPreviewRoot();
+    if (!root) return;
+    root.querySelectorAll(":scope > :not(style)").forEach(node => node.remove());
+    const wrapper = document.createElement("div");
+    wrapper.className = "rep_previewBody";
+    wrapper.innerHTML = html || '<span>No output returned.</span>';
+    root.appendChild(wrapper);
+  }
+
+  function fsReport_wirePreviewDropZone(){
+    const outputWrap = document.getElementById("rep_outputWrap");
+    const output = document.getElementById("rep_output");
+    if (!outputWrap || !output) return;
+
+    outputWrap.addEventListener("dragover", event => {
+      event.preventDefault();
+      outputWrap.classList.add("is-dropTarget");
+    });
+
+    outputWrap.addEventListener("dragleave", () => {
+      outputWrap.classList.remove("is-dropTarget");
+    });
+
+    outputWrap.addEventListener("drop", event => {
+      event.preventDefault();
+      outputWrap.classList.remove("is-dropTarget");
+      const payload = event.dataTransfer.getData("text/plain");
+      if (!payload) return;
+      try {
+        const data = JSON.parse(payload);
+        fsReport_insertPreviewCard(data);
+      } catch (err) {
+        fsReport_insertPreviewCard({ title: "Approved article", url: payload });
+      }
+    });
+  }
+
+  function fsReport_insertPreviewCard(data){
+    const root = fsReport_getPreviewRoot();
+    if (!root) return;
+    let container = root.querySelector("#rep_previewCards");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "rep_previewCards";
+      root.prepend(container);
+    }
+
+    const card = document.createElement("div");
+    card.className = "rep_previewInsert";
+    card.innerHTML = `
+      <div class="rep_cardTitle">${data.title || "Approved article"}</div>
+      <div class="rep_cardMeta">${data.url || ""}</div>
+    `;
+    container.appendChild(card);
+  }
+
+  function fsReport_renderApprovedCards(lines){
+    const cardsWrap = document.getElementById("rep_cards");
+    if (!cardsWrap) return;
+    cardsWrap.innerHTML = "";
+    if (!lines.length) {
+      cardsWrap.innerHTML = '<div class="rep_cardsEmpty">Add links and generate a report to see picks.</div>';
+      return;
+    }
+
+    lines.forEach(urlText => {
+      const data = fsReport_buildCardData(urlText);
+      const card = document.createElement("div");
+      card.className = "rep_card";
+      card.setAttribute("draggable", "true");
+      card.innerHTML = `
+        <div class="rep_cardTitle">${data.title}</div>
+        <div class="rep_cardMeta">${data.url}</div>
+      `;
+      card.addEventListener("dragstart", event => {
+        event.dataTransfer.setData("text/plain", JSON.stringify(data));
+        event.dataTransfer.effectAllowed = "copy";
+      });
+      cardsWrap.appendChild(card);
+    });
+  }
+
+  function fsReport_buildCardData(urlText){
+    try {
+      const url = new URL(urlText);
+      const host = url.hostname.replace("www.", "");
+      return { title: host, url: url.href };
+    } catch (err) {
+      return { title: "Approved article", url: urlText };
+    }
+  }
 
   function fsReport_setBusy(isBusy, msg) {
     const s = document.getElementById("rep_status");
@@ -224,11 +421,11 @@
 
   function fsReport_clearAll(){
     document.getElementById("rep_linksInput").value = "";
+    fsReport_renderApprovedCards([]);
     if (window.__repSampleHtml) {
-      document.getElementById("rep_output").innerHTML = window.__repSampleHtml;
+      fsReport_setPreviewHtml(window.__repSampleHtml);
     } else {
-      document.getElementById("rep_output").innerHTML =
-        '<span style="color:rgba(255,255,255,.55)">Cleared.</span>';
+      fsReport_setPreviewHtml("Cleared.");
     }
     fsReport_setBusy(false, "Ready.");
   }
@@ -241,11 +438,11 @@
     }
 
     fsReport_setBusy(true, "Generating report preview…");
+    fsReport_renderApprovedCards(lines);
 
     google.script.run
       .withSuccessHandler(html => {
-        document.getElementById("rep_output").innerHTML =
-          html || '<span style="color:rgba(255,255,255,.55)">No output returned.</span>';
+        fsReport_setPreviewHtml(html);
         fsReport_setOk("Report generated.");
         fsReport_setBusy(false);
       })
