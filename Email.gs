@@ -240,7 +240,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
   const tplTopics = [];
   (topics || []).forEach((t, i) => {
     const topicNo = t.topicNo || (i + 1);
-    const sectionTitle = sectionLabels[i] || `Topic ${topicNo}`;
+    const sectionTitle = t.sectionTitle || sectionLabels[i] || `Topic ${topicNo}`;
     const barColor = (topicNo === 2) ? "#FF7300" : "#002A7B";
 
     // Topic image -> CID
@@ -355,7 +355,7 @@ function buildFuturescansPreviewHtml_(topics, weekLabel, options) {
 
   const tplTopics = (topics || []).map((t, i) => {
     const topicNo = t.topicNo || (i + 1);
-    const sectionTitle = sectionLabels[i] || `Topic ${topicNo}`;
+    const sectionTitle = t.sectionTitle || sectionLabels[i] || `Topic ${topicNo}`;
     const barColor = (topicNo === 2) ? "#FF7300" : "#002A7B";
     const attachmentLabel = t.attachmentLabel ||
       `Article ${topicNo} – ${(t.title || "Untitled").slice(0, 40)}.pdf`;

@@ -13,7 +13,7 @@
 /* =========================================================================
  * Public helper: build topics from user links
  * Returns array of topic objects:
- * { topicNo, title, relevance20, summaryHtml, imageUrl, pdfUrl, articleUrl }
+ * { topicNo, title, relevance20, summaryHtml, imageUrl, pdfUrl, articleUrl, sectionTitle }
  * ========================================================================= */
 
 function rpt_buildTopicsFromLinks_(linksText, opts) {
@@ -37,6 +37,7 @@ function rpt_buildTopicsFromLinks_(linksText, opts) {
 
     // AI
     const ai = generateAiBits_(a);
+    const sectionTitle = generateAiTopicHeader_(a);
 
     // optional PDF (offline article replica)
     let pdfUrl = "";
@@ -55,7 +56,8 @@ function rpt_buildTopicsFromLinks_(linksText, opts) {
       summaryHtml: ai.summaryHtml,
       imageUrl: a.ogImage || "",
       pdfUrl: pdfUrl,
-      articleUrl: a.url
+      articleUrl: a.url,
+      sectionTitle
     });
   }
 
@@ -482,6 +484,129 @@ Rules:
   });
 
   return { relevance20, summaryHtml };
+}
+
+/* =========================================================================
+ * 2b) Topic header classification
+ * ========================================================================= */
+
+function generateAiTopicHeader_(article) {
+  const options = getReportTopicOptions_();
+  const fallback = "Other Labour Markets";
+  const sourceText = cleanForModel_(article.description || article.text || "").slice(0, 4000);
+  const title = String(article.title || "").trim();
+
+  if (!title && sourceText.length < 80) {
+    return fallback;
+  }
+
+  const prompt = `
+You are classifying a news article for a MOM Singapore FutureScans brief.
+
+Choose the single best topic label from this list:
+${options.map(o => `- ${o}`).join("\n")}
+
+Article:
+TITLE: ${title}
+URL: ${article.url}
+TEXT (may be partial): ${sourceText}
+
+Return STRICT JSON only:
+{ "topic": "one label from the list above" }
+
+Rules:
+- Output JSON only (no markdown fences).
+- Use the label exactly as written in the list.
+`.trim();
+
+  try {
+    const raw = aiGenerateJson_(prompt);
+    const obj = safeJsonParse_(raw);
+    const picked = String(obj.topic || "").trim();
+    if (isReportTopicOption_(picked, options)) {
+      return picked;
+    }
+  } catch (e) {
+    // fall through to heuristic
+  }
+
+  const heuristic = classifyTopicHeuristic_(article, options);
+  return heuristic || fallback;
+}
+
+function getReportTopicOptions_() {
+  return [
+    "Jobs/ Employment and skills",
+    "Minimum wage/ Low-wage workers",
+    "Self-employed persons/ Platform workers",
+    "Senior workers",
+    "Retirement adequacy",
+    "Migrant workers/ Foreign workers policy",
+    "Women at work",
+    "Union/ Labour movement",
+    "Workplace safety and health/ Workplace injury",
+    "Behaviour Insights",
+    "Organisational culture/ Organisational health/ Work culture",
+    "Hybrid working/ Remote working/ Flexible work arrangements",
+    "Artificial intelligence/ Generative AI",
+    "Tech/ Automation"
+  ];
+}
+
+function isReportTopicOption_(value, options) {
+  if (!value) return false;
+  const v = String(value).trim().toLowerCase();
+  return (options || []).some(opt => String(opt).trim().toLowerCase() === v);
+}
+
+function classifyTopicHeuristic_(article, options) {
+  const text = `${article.title || ""} ${article.description || ""} ${article.text || ""}`.toLowerCase();
+  const pick = label => (isReportTopicOption_(label, options) ? label : "");
+
+  if (text.match(/\b(ai|artificial intelligence|generative ai|llm|chatgpt)\b/)) {
+    return pick("Artificial intelligence/ Generative AI");
+  }
+  if (text.match(/\b(automation|robotics|automated|autonomous|digitisation|digitalization|technology|tech)\b/)) {
+    return pick("Tech/ Automation");
+  }
+  if (text.match(/\b(remote|hybrid|flexible work|work from home|telework)\b/)) {
+    return pick("Hybrid working/ Remote working/ Flexible work arrangements");
+  }
+  if (text.match(/\b(behaviour|behavioral|behavioural|nudges?|insight)\b/)) {
+    return pick("Behaviour Insights");
+  }
+  if (text.match(/\b(culture|organisational|organizational|workplace culture)\b/)) {
+    return pick("Organisational culture/ Organisational health/ Work culture");
+  }
+  if (text.match(/\b(safety|injury|accident|osha|wsq|workplace safety)\b/)) {
+    return pick("Workplace safety and health/ Workplace injury");
+  }
+  if (text.match(/\b(union|labour movement|labor movement|collective bargaining)\b/)) {
+    return pick("Union/ Labour movement");
+  }
+  if (text.match(/\b(women|female|gender)\b/)) {
+    return pick("Women at work");
+  }
+  if (text.match(/\b(migrant|foreign worker|work permit|s pass|employment pass)\b/)) {
+    return pick("Migrant workers/ Foreign workers policy");
+  }
+  if (text.match(/\b(retirement|pension|cpf|elderly|aged|older workers)\b/)) {
+    return pick("Retirement adequacy");
+  }
+  if (text.match(/\b(senior worker|older worker|ageing workforce|aging workforce)\b/)) {
+    return pick("Senior workers");
+  }
+  if (text.match(/\b(self-employed|self employed|platform worker|gig worker|freelancer)\b/)) {
+    return pick("Self-employed persons/ Platform workers");
+  }
+  if (text.match(/\b(minimum wage|low-wage|low wage|workfare)\b/)) {
+    return pick("Minimum wage/ Low-wage workers");
+  }
+  if (text.match(/\b(job|employment|skills|training|reskilling|upskilling|labour market|labor market)\b/)) {
+    return pick("Jobs/ Employment and skills");
+  }
+
+  return "";
 }
 
 function safeJsonParse_(raw) {
