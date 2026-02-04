@@ -261,6 +261,16 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
           inlineImages.push({ cid: imgCid, blob: blob, filename: imgCid });
         }
       }
+      if (!imgCid) {
+        const proxied = tryFetchProxyImageBlob_(t.imageUrl);
+        if (proxied) {
+          const proxyMime = (proxied.getContentType && proxied.getContentType()) || "";
+          if (isOutlookInlineImageMime_(proxyMime)) {
+            imgCid = `fs_img_${topicNo}`;
+            inlineImages.push({ cid: imgCid, blob: proxied, filename: imgCid });
+          }
+        }
+      }
     }
 
     // Offline PDF attachment (via pdf.gs)
@@ -310,6 +320,8 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
 
     const attachmentLabel = hasPdf ? (pdfName || `Article ${topicNo} - ${t.title || "Untitled"}.pdf`) : "";
 
+    const fallbackImgSrc = email_getImageFallbackUrl_(t.imageUrl || "");
+
     tplTopics.push({
       topicNo,
       sectionTitle,
@@ -319,7 +331,7 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
       summaryHtml: sanitizeHtmlBasic_(t.summaryHtml || ""),
       articleUrl: t.articleUrl || "#",
       imgCid,
-      imgSrc: imgCid ? `cid:${imgCid}` : "",
+      imgSrc: imgCid ? `cid:${imgCid}` : fallbackImgSrc,
       hasPdf,
       attachmentLabel,
       pdfError
@@ -415,6 +427,19 @@ function buildPreviewImageDataUrl_(label) {
     `font-family="Aptos,Segoe UI,Arial" font-size="12" fill="#4a4a4a">` +
     `${safeLabel}</text></svg>`;
   return "data:image/svg+xml;base64," + Utilities.base64Encode(svg);
+}
+
+function email_getImageFallbackUrl_(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  return buildImageProxyUrl_(raw);
+}
+
+function buildImageProxyUrl_(url) {
+  const clean = String(url || "").trim();
+  if (!clean) return "";
+  const encoded = encodeURIComponent(clean);
+  return `https://images.weserv.nl/?url=${encoded}&output=jpg`;
 }
 
 /**
@@ -868,6 +893,25 @@ function tryFetchImageBlobSafe_(url) {
     if (resp.getResponseCode() >= 400) return null;
     return resp.getBlob();
   } catch (e2) {
+    return null;
+  }
+}
+
+function tryFetchProxyImageBlob_(url) {
+  const proxyUrl = buildImageProxyUrl_(url);
+  if (!proxyUrl) return null;
+  try {
+    const resp = UrlFetchApp.fetch(proxyUrl, {
+      muteHttpExceptions: true,
+      followRedirects: true,
+      headers: {
+        "User-Agent": EMAIL_UA,
+        "Accept": "image/jpeg,image/png,image/*,*/*;q=0.8"
+      }
+    });
+    if (resp.getResponseCode() >= 400) return null;
+    return resp.getBlob();
+  } catch (e) {
     return null;
   }
 }
