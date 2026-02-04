@@ -179,6 +179,7 @@ const RAW_LLM_GUIDE_TEXT = [
 ].join("\n");
 
 const RAW_LLM_MAX_TEXT_CHARS = 6000;
+const RAW_LLM_RANK_CACHE_KEY = "RAW_LLM_RANK_CACHE_V1";
 
 function ui_runWeeklyPicksLlmRank_v1(payload) {
   try {
@@ -286,16 +287,20 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       }
     });
 
+    const meta = {
+      prompt,
+      requested: target.length,
+      scored: results.length,
+      prompt_chars_total: promptChars,
+      tokens_estimate: estimateTokensFromChars_(promptChars),
+      source: "Raw Articles",
+      savedAt: new Date().toISOString()
+    };
+    raw_saveLlmRankCache_({ results, meta });
+
     return {
       ok: true,
-      meta: {
-        prompt,
-        requested: target.length,
-        scored: results.length,
-        prompt_chars_total: promptChars,
-        tokens_estimate: estimateTokensFromChars_(promptChars),
-        source: "Raw Articles"
-      },
+      meta,
       results,
       errors
     };
@@ -304,10 +309,39 @@ function ui_runRawArticlesLlmRank_v2(payload) {
   }
 }
 
+function ui_getRawArticlesLlmRankCache_v1() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty(RAW_LLM_RANK_CACHE_KEY);
+    if (!raw) return { ok: true, results: [], meta: null };
+    const parsed = JSON.parse(raw);
+    return {
+      ok: true,
+      results: Array.isArray(parsed?.results) ? parsed.results : [],
+      meta: parsed?.meta || null
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
+function ui_clearRawArticlesLlmRankCache_v1() {
+  PropertiesService.getScriptProperties().deleteProperty(RAW_LLM_RANK_CACHE_KEY);
+  return { ok: true };
+}
+
 function estimateTokensFromChars_(chars) {
   const n = Number(chars || 0);
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.max(1, Math.round(n / 4));
+}
+
+function raw_saveLlmRankCache_(payload) {
+  const safe = payload || {};
+  const serialized = JSON.stringify({
+    results: Array.isArray(safe.results) ? safe.results : [],
+    meta: safe.meta || null
+  });
+  PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_CACHE_KEY, serialized);
 }
 
 function weekly_buildLlmArticle_(row, fetchText) {
