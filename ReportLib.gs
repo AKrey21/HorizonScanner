@@ -686,7 +686,7 @@ function tryFetchImageBlob_(imgUrl) {
  * ========================================================================= */
 
 function renderTopicBlock_(topicNo, title, relevance20, summaryHtml, imgUrl, pdfUrl, articleUrl) {
-  const barColor = (topicNo % 2 === 0) ? "#FF7300" : "#002A7B";
+  const barColor = (topicNo === 2) ? "#F57C00" : "#0D47A1";
   const linkStyle = "color:#1a73e8; text-decoration:underline;";
 
   const imgHtml = imgUrl
@@ -700,7 +700,7 @@ function renderTopicBlock_(topicNo, title, relevance20, summaryHtml, imgUrl, pdf
   return `
   <div style="margin-bottom:18px; border:1px solid #eee;">
     <div style="background:${barColor}; color:#fff; padding:6px 10px; font-weight:bold;">
-      &lt;Topic&gt;
+      &lt;Topic ${topicNo}&gt;
     </div>
 
     <div style="padding:10px 12px;">
