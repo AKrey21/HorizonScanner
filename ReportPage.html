@@ -94,73 +94,8 @@
     border-radius: 12px;
     min-height: 720px;
     overflow: hidden;
-  }
-  .rep_previewGrid{
-    display:grid;
-    grid-template-columns: minmax(0, 1fr) 260px;
-    gap:12px;
-  }
-  @media (max-width: 1100px){
-    .rep_previewGrid{ grid-template-columns: 1fr; }
-  }
-  .rep_cardsPanel{
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: rgba(0,0,0,.22);
-    color: var(--text);
-    padding: 12px;
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-    min-height: 220px;
-  }
-  .rep_cardsHeader{
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: .02em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .rep_cardsList{
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-  }
-  .rep_card{
-    border: 1px solid rgba(125,178,255,.4);
-    border-radius: 10px;
-    padding: 10px;
-    background: linear-gradient(180deg, rgba(125,178,255,.12), rgba(125,178,255,.04));
-    cursor: grab;
-  }
-  .rep_card:active{ cursor: grabbing; }
-  .rep_cardTitle{ font-size: 13px; font-weight: 600; }
-  .rep_cardMeta{ font-size: 11px; color: var(--muted2); margin-top: 6px; word-break: break-all; }
-  .rep_cardsEmpty{
-    font-size: 12px;
-    color: var(--muted);
-    padding: 8px;
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    text-align: center;
-  }
-  .rep_cardsHint{
-    font-size: 11px;
-    color: var(--muted2);
-  }
-  .rep_outputWrap.is-dropTarget{
-    outline: 2px dashed rgba(125,178,255,.6);
-    outline-offset: 4px;
-  }
-  .rep_previewInsert{
-    border: 1px dashed rgba(125,178,255,.6);
-    border-radius: 10px;
-    padding: 10px;
-    margin-bottom: 12px;
-    background: rgba(125,178,255,.08);
-  }
-  .rep_previewInsert .rep_cardTitle{
-    color: #1b2a3b;
+    position: relative;
+    isolation: isolate;
   }
   .rep_previewGrid{
     display:grid;
@@ -236,7 +171,7 @@
     --rep-preview-scale: 0.85;
     transform: scale(var(--rep-preview-scale));
     transform-origin: top left;
-    width: calc(100% / var(--rep-preview-scale));
+    width: 100%;
   }
   #rep_output table{
     width: 100% !important;
