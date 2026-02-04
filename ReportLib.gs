@@ -5,7 +5,7 @@
  * - Parse links
  * - Resolve Google News wrapper → publisher URL
  * - Fetch article meta (via your existing fetchArticleMeta_)
- * - Gemini summarisation (via your existing geminiGenerateJson_)
+ * - AI summarisation (via your existing aiGenerateJson_)
  * - Optional PDF hook (pdf_makeArticlePdf_) kept but gated by caller
  * - Preview block rendering helpers
  ******************************/
@@ -448,7 +448,7 @@ Rules:
 
   let raw = "";
   try {
-    raw = geminiGenerateJson_(prompt); // dependency elsewhere
+    raw = aiGenerateJson_(prompt); // dependency elsewhere
   } catch (e) {
     return fallbackAi_(article);
   }
@@ -457,8 +457,8 @@ Rules:
   try {
     obj = safeJsonParse_(raw);
   } catch (e) {
-    console.log("Gemini JSON parse failed:", e && e.message ? e.message : e);
-    console.log("RAW GEMINI OUTPUT (first 800 chars):", String(raw).slice(0, 800));
+    console.log("AI JSON parse failed:", e && e.message ? e.message : e);
+    console.log("RAW AI OUTPUT (first 800 chars):", String(raw).slice(0, 800));
     return fallbackAi_(article);
   }
 

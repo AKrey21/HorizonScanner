@@ -1,5 +1,5 @@
 /*********************************
- * FEED DISCOVERY (Gemini-assisted)
+ * FEED DISCOVERY (AI-assisted)
  *
  * UX goal:
  * - Non-tech user pastes a homepage URL in "Feed Discovery"
@@ -23,10 +23,9 @@
 
 const FEED_DISCOVERY_SHEET = "Feed Discovery";
 
-// Gemini config
-const GEMINI_MODEL = "gemini-2.5-flash"; // adjust if needed
+// AI config is controlled via Script Properties (AI_PROVIDER / AI_MODEL)
 // Behavior
-const MAX_HTML_CHARS_SENT_TO_GEMINI = 12000; // keep prompts bounded
+const MAX_HTML_CHARS_SENT_TO_AI = 12000; // keep prompts bounded
 const VERIFY_FEED_FETCH = true;              // verify candidates are real RSS/Atom
 const AUTO_ACTIVATE_NEW_FEEDS = true;        // new feeds Active? default
 const CLEAR_DISCOVERY_OUTPUT_BEFORE_RUN = false; // if true, clears D:E before processing
@@ -410,11 +409,11 @@ function buildGoogleNewsSiteRss_(homepage) {
 }
 
 /***********************
- * Gemini call
+ * AI call
  ***********************/
 
 function geminiSuggestFeeds_(homepage, html, extractedCandidates) {
-  const snippet = (html || "").slice(0, MAX_HTML_CHARS_SENT_TO_GEMINI);
+  const snippet = (html || "").slice(0, MAX_HTML_CHARS_SENT_TO_AI);
 
   const prompt =
 `You are helping a non-technical user set up RSS feeds for a news site.
@@ -435,8 +434,7 @@ Return ONLY valid RSS or Atom feed URLs for this site, as a JSON array of string
   https://news.google.com/rss/search?q=site:DOMAIN&hl=en-SG&gl=SG&ceid=SG:en
 - Do not include explanations. JSON only.`;
 
-  const text = geminiGenerateText_(prompt, {
-    model: GEMINI_MODEL,
+  const text = aiGenerateText_(prompt, {
     temperature: 0.2,
     maxOutputTokens: 800,
     responseMimeType: "application/json"

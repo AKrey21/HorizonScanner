@@ -180,13 +180,12 @@ function generateExecutiveSummary() {
 
   let selectionText = "";
   try {
-    selectionText = geminiGenerateText_(prompt, {
-      model: "gemini-2.5-flash",
+    selectionText = aiGenerateText_(prompt, {
       temperature: 0.2,
       maxOutputTokens: 800
     });
   } catch (e) {
-    Logger.log("Gemini API failed: " + e);
+    Logger.log("AI API failed: " + e);
   }
 
   let selected = [];
