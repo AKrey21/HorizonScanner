@@ -127,7 +127,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
   .picksRoot .llmNote { padding: 8px 10px; font-size: 12px; color: #ddd; background: #151515; border-bottom: 1px solid #333; }
   .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
   .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
-  .picksRoot td { background: #0f0f0f; }
+  .picksRoot td { background: #0f0f0f; color: #e8e8e8; }
   .picksRoot tr:nth-child(even) td { background: #121212; }
   .picksRoot th { position: sticky; top: 0; background: #1b1b1b; z-index: 1; text-align: left; color: #f5f5f5; }
   .picksRoot a { color: #9bd; }
@@ -506,7 +506,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
     PICKS_LLM_META = (res && res.meta) || null;
 
     var hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
-    if (!hasPicks && options && options.allowFallback) {
+    var forceLlmRows = options && options.forceLlmRows;
+    if ((!hasPicks || forceLlmRows) && options && options.allowFallback) {
       var fallbackRows = results.map(function (item) {
         return {
           Title: (item && item.title) || "",
@@ -527,7 +528,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.ok === true && Array.isArray(res.results) && res.results.length > 0) {
-          picks_applyLlmResults(res, { allowFallback: true });
+          picks_applyLlmResults(res, { allowFallback: true, forceLlmRows: true });
         } else {
           PICKS_LLM_RESULTS = {};
           PICKS_LLM_META = null;
@@ -593,7 +594,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
             return;
           }
 
-          picks_applyLlmResults(res, { allowFallback: true });
+          picks_applyLlmResults(res, { allowFallback: true, forceLlmRows: true });
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
 
