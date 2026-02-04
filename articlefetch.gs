@@ -13,8 +13,9 @@ function fetchArticleMeta_(url) {
   const titleTag = match_(html, /<title[^>]*>([^<]+)<\/title>/i);
   const title = cleanText_(ogTitle || titleTag || "Untitled");
 
-  // og:image (best for report image)
-  const ogImage = matchMeta_(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i);
+  // Image candidates (best for report image)
+  const imageCandidates = extractImageCandidates_(html);
+  const ogImage = imageCandidates.length ? resolveUrl_(imageCandidates[0], url) : "";
 
   // Description (optional)
   const desc = matchMeta_(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i)
@@ -31,6 +32,35 @@ function fetchArticleMeta_(url) {
     ogImage: ogImage || "",
     text: bodyText
   };
+}
+
+function extractImageCandidates_(html) {
+  const candidates = [];
+  const add = (value) => {
+    const clean = cleanText_(value || "");
+    if (!clean) return;
+    if (clean.startsWith("data:")) return;
+    candidates.push(clean);
+  };
+
+  add(matchMeta_(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i));
+  add(matchMeta_(html, /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/i));
+  add(matchMeta_(html, /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i));
+  add(matchMeta_(html, /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/i));
+  add(matchMeta_(html, /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i));
+  add(match_(html, /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/i));
+
+  return candidates;
+}
+
+function resolveUrl_(value, baseUrl) {
+  const raw = cleanText_(value || "");
+  if (!raw) return "";
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch (e) {
+    return raw;
+  }
 }
 
 function extractReadableText_(html) {
@@ -70,4 +100,3 @@ function matchMeta_(s, re) {
 function cleanText_(s) {
   return (s || "").replace(/\s+/g, " ").trim();
 }
-
