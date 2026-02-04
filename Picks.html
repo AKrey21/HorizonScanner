@@ -124,6 +124,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
   .picksRoot .pre { background: #0b0b0b; border: 1px solid #333; border-radius: 10px; padding: 10px; overflow: auto; max-height: 160px; white-space: pre-wrap; }
 
   .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; background: #0d0d0d; }
+  .picksRoot .llmNote { padding: 8px 10px; font-size: 12px; color: #ddd; background: #151515; border-bottom: 1px solid #333; }
   .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
   .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
   .picksRoot td { background: #0f0f0f; }
@@ -397,7 +398,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
     var recommendedRows = useLlm
       ? rows.filter(function (r) { return picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended; })
       : rows;
-    var displayRows = useLlm ? recommendedRows : rows;
+    var showAllDueToNoRec = useLlm && rows.length && !recommendedRows.length;
+    var displayRows = showAllDueToNoRec ? rows : (useLlm ? recommendedRows : rows);
 
     if (!displayRows.length) {
       var meta = PICKS_META || {};
@@ -424,7 +426,10 @@ Highlight policy levers and workforce risks for 2025-2030.'
       });
     }
 
-    var html = "<table><thead><tr>";
+    var noteHtml = showAllDueToNoRec
+      ? "<div class=\"llmNote\">No LLM recommendations; showing all scored rows.</div>"
+      : "";
+    var html = noteHtml + "<table><thead><tr>";
     finalHeaders.forEach(function (h) { html += "<th>" + escapeHtml(h) + "</th>"; });
     html += "</tr></thead><tbody>";
 

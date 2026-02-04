@@ -180,6 +180,8 @@ const RAW_LLM_GUIDE_TEXT = [
 
 const RAW_LLM_MAX_TEXT_CHARS = 6000;
 const RAW_LLM_RANK_CACHE_KEY = "RAW_LLM_RANK_CACHE_V1";
+const RAW_LLM_RANK_SHEET = "Raw LLM Rank Cache";
+const RAW_LLM_RANK_META_SHEET = "Raw LLM Rank Meta";
 
 function ui_runWeeklyPicksLlmRank_v1(payload) {
   try {
@@ -311,6 +313,15 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
 function ui_getRawArticlesLlmRankCache_v1() {
   try {
+    const sheetPayload = raw_readLlmRankSheet_();
+    if (sheetPayload) {
+      return {
+        ok: true,
+        results: sheetPayload.results,
+        meta: sheetPayload.meta
+      };
+    }
+
     const raw = PropertiesService.getScriptProperties().getProperty(RAW_LLM_RANK_CACHE_KEY);
     if (!raw) return { ok: true, results: [], meta: null };
     const parsed = JSON.parse(raw);
@@ -325,6 +336,7 @@ function ui_getRawArticlesLlmRankCache_v1() {
 }
 
 function ui_clearRawArticlesLlmRankCache_v1() {
+  raw_clearLlmRankSheets_();
   PropertiesService.getScriptProperties().deleteProperty(RAW_LLM_RANK_CACHE_KEY);
   return { ok: true };
 }
@@ -342,6 +354,103 @@ function raw_saveLlmRankCache_(payload) {
     meta: safe.meta || null
   });
   PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_CACHE_KEY, serialized);
+  raw_writeLlmRankSheet_(safe);
+}
+
+function raw_getOrCreateSheet_(name) {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  return sheet;
+}
+
+function raw_clearLlmRankSheets_() {
+  const ss = getSpreadsheet_();
+  const cacheSheet = ss.getSheetByName(RAW_LLM_RANK_SHEET);
+  if (cacheSheet) cacheSheet.clearContents();
+  const metaSheet = ss.getSheetByName(RAW_LLM_RANK_META_SHEET);
+  if (metaSheet) metaSheet.clearContents();
+}
+
+function raw_writeLlmRankSheet_(payload) {
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const meta = payload?.meta || null;
+
+  const cacheSheet = raw_getOrCreateSheet_(RAW_LLM_RANK_SHEET);
+  const headers = ["key", "title", "url", "llm_json"];
+  cacheSheet.clearContents();
+  cacheSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (results.length) {
+    const rows = results.map((item) => ([
+      item?.key || "",
+      item?.title || "",
+      item?.url || "",
+      JSON.stringify(item?.llm || {})
+    ]));
+    cacheSheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  }
+
+  const metaSheet = raw_getOrCreateSheet_(RAW_LLM_RANK_META_SHEET);
+  metaSheet.clearContents();
+  metaSheet.getRange(1, 1, 1, 2).setValues([["key", "value"]]);
+  if (meta) {
+    const metaRows = Object.keys(meta).map((key) => [key, String(meta[key])]);
+    if (metaRows.length) metaSheet.getRange(2, 1, metaRows.length, 2).setValues(metaRows);
+  }
+}
+
+function raw_readLlmRankSheet_() {
+  const ss = getSpreadsheet_();
+  const cacheSheet = ss.getSheetByName(RAW_LLM_RANK_SHEET);
+  if (!cacheSheet) return null;
+  const lastRow = cacheSheet.getLastRow();
+  const lastCol = cacheSheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 4) return null;
+
+  const values = cacheSheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = values[0].map((h) => String(h || "").trim());
+  const idx = {
+    key: headers.indexOf("key"),
+    title: headers.indexOf("title"),
+    url: headers.indexOf("url"),
+    llm: headers.indexOf("llm_json")
+  };
+
+  const results = [];
+  for (let i = 1; i < values.length; i += 1) {
+    const row = values[i];
+    const key = idx.key >= 0 ? row[idx.key] : "";
+    if (!key) continue;
+    const llmRaw = idx.llm >= 0 ? String(row[idx.llm] || "") : "";
+    let llm = {};
+    if (llmRaw) {
+      try {
+        llm = JSON.parse(llmRaw);
+      } catch (err) {
+        llm = {};
+      }
+    }
+    results.push({
+      key: String(key),
+      title: idx.title >= 0 ? String(row[idx.title] || "") : "",
+      url: idx.url >= 0 ? String(row[idx.url] || "") : "",
+      llm
+    });
+  }
+
+  let meta = null;
+  const metaSheet = ss.getSheetByName(RAW_LLM_RANK_META_SHEET);
+  if (metaSheet && metaSheet.getLastRow() >= 2) {
+    const metaValues = metaSheet.getRange(1, 1, metaSheet.getLastRow(), 2).getValues();
+    meta = {};
+    for (let i = 1; i < metaValues.length; i += 1) {
+      const key = String(metaValues[i][0] || "").trim();
+      if (!key) continue;
+      meta[key] = String(metaValues[i][1] || "");
+    }
+  }
+
+  return { results, meta };
 }
 
 function weekly_buildLlmArticle_(row, fetchText) {
