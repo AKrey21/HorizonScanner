@@ -9,7 +9,7 @@
       <h3>Scoring Config (JSON)</h3>
       <p class="muted">Edit the config JSON directly. Save → Run scoring → Refresh picks.</p>
 
-      <!-- ✅ AI Prompt + options -->
+      <!--  AI Prompt + options -->
       <div class="aiBlock">
         <div class="aiRow">
           <textarea id="aiPrompt" rows="3"
@@ -65,7 +65,7 @@
         <div class="aiRow">
           <textarea id="llmPrompt" rows="3"
             placeholder='LLM ranking prompt (uses existing Theme/POI labels). Example:
-Highlight policy levers and workforce risks for 2025–2030.'
+Highlight policy levers and workforce risks for 2025-2030.'
             spellcheck="false"></textarea>
           <button id="btn_llmRun" class="btn" onclick="picks_runLlmRank()">Run LLM rank</button>
         </div>
@@ -123,13 +123,27 @@ Highlight policy levers and workforce risks for 2025–2030.'
   .picksRoot .muted { color: #aaa; font-size: 12px; margin-top: 0; }
   .picksRoot .pre { background: #0b0b0b; border: 1px solid #333; border-radius: 10px; padding: 10px; overflow: auto; max-height: 160px; white-space: pre-wrap; }
 
-  .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; }
-  .picksRoot table { border-collapse: collapse; width: 100%; }
+  .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; background: #0d0d0d; }
+  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
   .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
-  .picksRoot th { position: sticky; top: 0; background: #151515; z-index: 1; text-align: left; }
+  .picksRoot td { background: #0f0f0f; }
+  .picksRoot tr:nth-child(even) td { background: #121212; }
+  .picksRoot th { position: sticky; top: 0; background: #1b1b1b; z-index: 1; text-align: left; color: #f5f5f5; }
   .picksRoot a { color: #9bd; }
+  .picksRoot .llmRecBadge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .picksRoot .llmRecBadge--yes { background: #1b4d2b; color: #d7ffe6; border: 1px solid #2e7d4f; }
+  .picksRoot .llmRecBadge--no { background: #3d1c1c; color: #ffd7d7; border: 1px solid #7a2b2b; }
+  .picksRoot .llmRecBadge--unknown { background: #2a2a2a; color: #d8d8d8; border: 1px solid #444; }
 
-  /* ✅ AI block */
+  /*  AI block */
   .picksRoot .aiBlock { margin: 8px 0 10px 0; }
   .picksRoot .aiRow {
     display: grid;
@@ -256,7 +270,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     if (useBaseline) {
       baselineJsonText = document.getElementById("cfg_json")?.value || "";
       if (baselineJsonText.trim() && !isValidJson(baselineJsonText)) {
-        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck “Use current JSON as baseline”) then try again.");
+        picks_setAiStatus("Baseline JSON is not valid JSON. Fix it (or uncheck "Use current JSON as baseline") then try again.");
         return;
       }
     }
@@ -279,7 +293,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
           const ta = document.getElementById("cfg_json");
           if (ta) ta.value = res.jsonText;
 
-          picks_setAiStatus("Generated ✅ Review the JSON, then click “Save JSON”.");
+          picks_setAiStatus("Generated  Review the JSON, then click "Save JSON".");
         } catch (err) {
           console.error(err);
           picks_setAiStatus("UI error: " + (err.message || err));
@@ -302,7 +316,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
         const ta = document.getElementById("cfg_json");
         const jsonText = res && res.jsonText ? res.jsonText : "";
         if (ta) ta.value = jsonText;
-        picks_setStatus(jsonText ? "Loaded ✅" : "Loaded, but config was empty.");
+        picks_setStatus(jsonText ? "Loaded " : "Loaded, but config was empty.");
       })
       .withFailureHandler(e => {
         console.error(e);
@@ -318,7 +332,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     google.script.run
       .withSuccessHandler(res => {
         if (res && res.savedText && ta) ta.value = res.savedText;
-        picks_setStatus("Saved ✅");
+        picks_setStatus("Saved ");
       })
       .withFailureHandler(e => {
         console.error(e);
@@ -331,7 +345,7 @@ Highlight policy levers and workforce risks for 2025–2030.'
     picks_setStatus("Running scoring...");
     google.script.run
       .withSuccessHandler(msg => {
-        picks_setStatus((msg || "Scoring done ✅") + "\nRefreshing picks...");
+        picks_setStatus((msg || "Scoring done ") + "\nRefreshing picks...");
         picks_refresh();
       })
       .withFailureHandler(e => {
@@ -350,11 +364,8 @@ Highlight policy levers and workforce risks for 2025–2030.'
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
           PICKS_META = safe.meta || {};
-          PICKS_LLM_RESULTS = {};
-          PICKS_LLM_META = null;
-          picks_setLlmStatus("");
-          picks_renderFiltered();
-          picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
+          picks_setStatus(`Refreshed  (${PICKS_ROWS.length} rows)`);
+          picks_loadLlmCache();
         } catch (err) {
           console.error(err);
           picks_setStatus("Render failed: " + (err.message || err));
@@ -379,21 +390,27 @@ Highlight policy levers and workforce risks for 2025–2030.'
     const wrap = document.getElementById("picks_tableWrap");
     if (!wrap) return;
 
-    if (!rows.length) {
+    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    const recommendedRows = useLlm
+      ? rows.filter(r => picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended)
+      : rows;
+    const displayRows = useLlm ? recommendedRows : rows;
+
+    if (!displayRows.length) {
       const meta = PICKS_META || {};
       const info = meta.sheetName
         ? ` (sheet: ${escapeHtml(meta.sheetName)}, lastRow=${meta.lastRow || 0}, lastCol=${meta.lastCol || 0})`
         : "";
-      wrap.innerHTML = `<div style='padding:10px;color:#aaa'>No rows.${info}</div>`;
+      const llmNote = useLlm ? " No recommended rows (LLM)." : "";
+      wrap.innerHTML = `<div style='padding:10px;color:#bbb'>No rows.${llmNote}${info}</div>`;
       return;
     }
 
-    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(rows[0]);
-    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(displayRows[0]);
     const extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
     const finalHeaders = headers.concat(extraHeaders);
 
-    const sortedRows = rows.slice();
+    const sortedRows = displayRows.slice();
     if (sortMode === "llmScoreDesc") {
       sortedRows.sort((a, b) => {
         const aKey = picks_buildLlmKey(a);
@@ -421,8 +438,9 @@ Highlight policy levers and workforce risks for 2025–2030.'
       if (useLlm) {
         const key = picks_buildLlmKey(r);
         const llm = PICKS_LLM_RESULTS[key] || {};
+        const recInfo = picks_getLlmRecInfo(llm);
         html += `<td>${escapeHtml(llm.final_score != null ? String(llm.final_score) : "")}</td>`;
-        html += `<td>${escapeHtml(llm.publish_recommendation || "")}</td>`;
+        html += `<td><span class="llmRecBadge ${recInfo.className}">${escapeHtml(recInfo.label)}</span></td>`;
         html += `<td>${escapeHtml(llm.summary || "")}</td>`;
       }
       html += "</tr>";
@@ -461,6 +479,59 @@ Highlight policy levers and workforce risks for 2025–2030.'
     return link || title;
   }
 
+  function picks_getLlmRecInfo(llm) {
+    const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
+    const isYes = ["yes", "y", "publish", "feature", "recommend", "recommended", "include"].some(v => raw === v || raw.includes(v));
+    const isNo = ["no", "n", "skip", "exclude", "reject"].some(v => raw === v || raw.includes(v));
+    if (isYes) return { label: "Recommend", className: "llmRecBadge--yes", isRecommended: true };
+    if (isNo) return { label: "Skip", className: "llmRecBadge--no", isRecommended: false };
+    return { label: raw ? raw : "Unknown", className: "llmRecBadge--unknown", isRecommended: false };
+  }
+
+  function picks_applyLlmResults(res, options) {
+    PICKS_LLM_RESULTS = {};
+    const results = Array.isArray(res?.results) ? res.results : [];
+    results.forEach(item => {
+      if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
+    });
+    PICKS_LLM_META = res?.meta || null;
+
+    const hasPicks = Array.isArray(PICKS_ROWS) && PICKS_ROWS.length > 0;
+    if (!hasPicks && options?.allowFallback) {
+      const fallbackRows = results.map(item => ({
+        Title: item?.title || "",
+        Link: item?.url || ""
+      }));
+      PICKS_ROWS = fallbackRows;
+      PICKS_HEADERS = ["Title", "Link"];
+      PICKS_META = {
+        sheetName: "Raw Articles (LLM preview)",
+        lastRow: fallbackRows.length ? fallbackRows.length + 1 : 0,
+        lastCol: PICKS_HEADERS.length
+      };
+    }
+  }
+
+  function picks_loadLlmCache() {
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.ok === true && Array.isArray(res.results) && res.results.length > 0) {
+          picks_applyLlmResults(res, { allowFallback: true });
+        } else {
+          PICKS_LLM_RESULTS = {};
+          PICKS_LLM_META = null;
+          picks_setLlmStatus("");
+        }
+        picks_renderFiltered();
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setLlmStatus("LLM cache load failed: " + (e.message || e));
+        picks_renderFiltered();
+      })
+      .ui_getRawArticlesLlmRankCache_v1();
+  }
+
   function picks_runLlmRank() {
     const prompt = (document.getElementById("llmPrompt")?.value || "").trim();
     if (!prompt) {
@@ -480,21 +551,17 @@ Highlight policy levers and workforce risks for 2025–2030.'
             picks_setLlmStatus("LLM rank failed: " + (res?.message || "unknown error"));
             return;
           }
-          PICKS_LLM_RESULTS = {};
-          (res.results || []).forEach(item => {
-            if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
-          });
-          PICKS_LLM_META = res.meta || { prompt };
+          picks_applyLlmResults(res, { allowFallback: true });
           document.getElementById("picksSort").value = "llmScoreDesc";
           picks_renderFiltered();
           const errList = Array.isArray(res.errors) ? res.errors : [];
           const errCount = errList.length;
           const tokenEstimate = res?.meta?.tokens_estimate;
-          const tokenNote = tokenEstimate ? ` — est tokens: ${tokenEstimate}` : "";
-          const errPreview = errCount ? ` — first errors: ${errList.slice(0, 3).join(" | ")}` : "";
+          const tokenNote = tokenEstimate ? ` - est tokens: ${tokenEstimate}` : "";
+          const errPreview = errCount ? ` - first errors: ${errList.slice(0, 3).join(" | ")}` : "";
           const msg = `LLM ranking complete (${res.results?.length || 0} scored from raw articles)` +
             tokenNote +
-            (errCount ? ` — ${errCount} errors` : "") +
+            (errCount ? ` - ${errCount} errors` : "") +
             errPreview;
           picks_setLlmStatus(msg);
         } catch (err) {
@@ -513,11 +580,19 @@ Highlight policy levers and workforce risks for 2025–2030.'
   }
 
   function picks_clearLlm() {
-    PICKS_LLM_RESULTS = {};
-    PICKS_LLM_META = null;
-    document.getElementById("picksSort").value = "default";
-    picks_setLlmStatus("LLM results cleared.");
-    picks_renderFiltered();
+    google.script.run
+      .withSuccessHandler(() => {
+        PICKS_LLM_RESULTS = {};
+        PICKS_LLM_META = null;
+        document.getElementById("picksSort").value = "default";
+        picks_setLlmStatus("LLM results cleared.");
+        picks_renderFiltered();
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setLlmStatus("LLM clear failed: " + (e.message || e));
+      })
+      .ui_clearRawArticlesLlmRankCache_v1();
   }
 
   window.addEventListener("error", (ev) => {
