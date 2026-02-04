@@ -53,6 +53,35 @@
         <label>Quick filter</label>
         <input id="filterText" type="text" placeholder="search..." oninput="picks_renderFiltered()">
       </div>
+      <div class="row">
+        <label>Sort</label>
+        <select id="picksSort" onchange="picks_renderFiltered()">
+          <option value="default" selected>Sheet order</option>
+          <option value="llmScoreDesc">LLM score (desc)</option>
+        </select>
+      </div>
+
+      <div class="aiBlock">
+        <div class="aiRow">
+          <textarea id="llmPrompt" rows="3"
+            placeholder='LLM ranking prompt (uses existing Theme/POI labels). Example:
+Highlight policy levers and workforce risks for 2025–2030.'
+            spellcheck="false"></textarea>
+          <button id="btn_llmRun" class="btn" onclick="picks_runLlmRank()">Run LLM rank</button>
+        </div>
+        <div class="aiOptions">
+          <label class="chk">
+            <input type="checkbox" id="llmFetch" checked>
+            Fetch article text
+          </label>
+          <div class="row" style="grid-template-columns: 120px 1fr; margin:0;">
+            <label>Max</label>
+            <input id="llmMax" type="text" placeholder="20">
+          </div>
+          <button class="btn" onclick="picks_clearLlm()">Clear LLM</button>
+        </div>
+        <div id="llm_status" class="muted" style="margin:6px 0 10px 0;"></div>
+      </div>
       <div id="picks_tableWrap" class="tableWrap"></div>
     </div>
   </div>
@@ -124,12 +153,23 @@
     user-select:none;
   }
   .picksRoot .chk input{ width:auto; padding:0; }
+
+  .picksRoot select{
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    background: #0b0b0b;
+    color: #eee;
+  }
 </style>
 
 <script>
   let PICKS_ROWS = [];
   let PICKS_HEADERS = [];
   let PICKS_META = {};
+  let PICKS_LLM_RESULTS = {};
+  let PICKS_LLM_META = null;
 
   function __init_picks() {
     picks_reloadConfig();
@@ -156,6 +196,11 @@
     if (el) el.textContent = msg || "";
   }
 
+  function picks_setLlmStatus(msg) {
+    const el = document.getElementById("llm_status");
+    if (el) el.textContent = msg || "";
+  }
+
   function picks_setAiBusy(isBusy) {
     const btn = document.getElementById("btn_aiGen");
     const inp = document.getElementById("aiPrompt");
@@ -164,6 +209,18 @@
     if (inp) inp.disabled = !!isBusy;
     if (chk) chk.disabled = !!isBusy;
     if (btn) btn.textContent = isBusy ? "Generating..." : "Generate via Gemini";
+  }
+
+  function picks_setLlmBusy(isBusy) {
+    const btn = document.getElementById("btn_llmRun");
+    const inp = document.getElementById("llmPrompt");
+    const chk = document.getElementById("llmFetch");
+    const max = document.getElementById("llmMax");
+    if (btn) btn.disabled = !!isBusy;
+    if (inp) inp.disabled = !!isBusy;
+    if (chk) chk.disabled = !!isBusy;
+    if (max) max.disabled = !!isBusy;
+    if (btn) btn.textContent = isBusy ? "Ranking..." : "Run LLM rank";
   }
 
   function picks_clearPrompt() {
@@ -280,6 +337,9 @@
           PICKS_HEADERS = safe.headers || [];
           PICKS_ROWS = safe.rows || [];
           PICKS_META = safe.meta || {};
+          PICKS_LLM_RESULTS = {};
+          PICKS_LLM_META = null;
+          picks_setLlmStatus("");
           picks_renderFiltered();
           picks_setStatus(`Refreshed ✅ (${PICKS_ROWS.length} rows)`);
         } catch (err) {
@@ -297,6 +357,7 @@
   function picks_renderFiltered() {
     const inp = document.getElementById("filterText");
     const q = (inp ? inp.value : "").toLowerCase();
+    const sortMode = (document.getElementById("picksSort")?.value || "default");
 
     const rows = !q
       ? PICKS_ROWS
@@ -315,12 +376,26 @@
     }
 
     const headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(rows[0]);
+    const useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
+    const extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
+    const finalHeaders = headers.concat(extraHeaders);
+
+    const sortedRows = rows.slice();
+    if (sortMode === "llmScoreDesc") {
+      sortedRows.sort((a, b) => {
+        const aKey = picks_buildLlmKey(a);
+        const bKey = picks_buildLlmKey(b);
+        const aScore = Number(PICKS_LLM_RESULTS[aKey]?.final_score || 0);
+        const bScore = Number(PICKS_LLM_RESULTS[bKey]?.final_score || 0);
+        return bScore - aScore;
+      });
+    }
 
     let html = "<table><thead><tr>";
-    headers.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
+    finalHeaders.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
     html += "</tr></thead><tbody>";
 
-    rows.forEach(r => {
+    sortedRows.forEach(r => {
       html += "<tr>";
       headers.forEach(h => {
         const v = r[h] == null ? "" : String(r[h]);
@@ -330,6 +405,13 @@
           html += `<td>${escapeHtml(v)}</td>`;
         }
       });
+      if (useLlm) {
+        const key = picks_buildLlmKey(r);
+        const llm = PICKS_LLM_RESULTS[key] || {};
+        html += `<td>${escapeHtml(llm.final_score != null ? String(llm.final_score) : "")}</td>`;
+        html += `<td>${escapeHtml(llm.publish_recommendation || "")}</td>`;
+        html += `<td>${escapeHtml(llm.summary || "")}</td>`;
+      }
       html += "</tr>";
     });
 
@@ -352,6 +434,91 @@
       .replaceAll("'","&#039;");
   }
   function escapeAttr(s){ return escapeHtml(s); }
+
+  function picks_getField(row, candidates) {
+    for (const key of candidates) {
+      if (row && row[key] != null && String(row[key]).trim()) return String(row[key]).trim();
+    }
+    return "";
+  }
+
+  function picks_buildLlmKey(row) {
+    const link = picks_getField(row, ["Link", "URL", "Url", "link", "url"]);
+    const title = picks_getField(row, ["Title", "title"]);
+    return link || title;
+  }
+
+  function picks_collectLlmInputRows(maxRows) {
+    const limit = Math.max(1, Math.min(60, Number(maxRows || 20)));
+    return PICKS_ROWS.slice(0, limit).map(r => ({
+      key: picks_buildLlmKey(r),
+      title: picks_getField(r, ["Title", "title"]),
+      link: picks_getField(r, ["Link", "URL", "Url", "link", "url"]),
+      date: picks_getField(r, ["Date", "date"]),
+      source: picks_getField(r, ["Source", "source"]),
+      theme: picks_getField(r, ["Theme", "theme"]),
+      poi: picks_getField(r, ["POI", "Poi", "Point of Interest", "poi"]),
+      snippet: picks_getField(r, ["DescriptionSnippet", "Description Snippet", "Snippet", "snippet"])
+    }));
+  }
+
+  function picks_runLlmRank() {
+    const prompt = (document.getElementById("llmPrompt")?.value || "").trim();
+    if (!prompt) {
+      picks_setLlmStatus("Please enter an LLM prompt.");
+      return;
+    }
+
+    const maxRows = Number((document.getElementById("llmMax")?.value || "").trim() || 20);
+    const fetchText = !!document.getElementById("llmFetch")?.checked;
+    const rows = picks_collectLlmInputRows(maxRows);
+
+    picks_setLlmBusy(true);
+    picks_setLlmStatus(`Ranking ${rows.length} articles...`);
+
+    google.script.run
+      .withSuccessHandler(res => {
+        try {
+          if (!res || res.ok !== true) {
+            picks_setLlmStatus("LLM rank failed: " + (res?.message || "unknown error"));
+            return;
+          }
+          PICKS_LLM_RESULTS = {};
+          (res.results || []).forEach(item => {
+            if (item && item.key) PICKS_LLM_RESULTS[item.key] = item.llm || {};
+          });
+          PICKS_LLM_META = res.meta || { prompt };
+          document.getElementById("picksSort").value = "llmScoreDesc";
+          picks_renderFiltered();
+          const errCount = Array.isArray(res.errors) ? res.errors.length : 0;
+          const tokenEstimate = res?.meta?.tokens_estimate;
+          const tokenNote = tokenEstimate ? ` — est tokens: ${tokenEstimate}` : "";
+          const msg = `LLM ranking complete (${res.results?.length || 0} scored)` +
+            tokenNote +
+            (errCount ? ` — ${errCount} errors (see Apps Script logs)` : "");
+          picks_setLlmStatus(msg);
+        } catch (err) {
+          console.error(err);
+          picks_setLlmStatus("LLM rank UI error: " + (err.message || err));
+        } finally {
+          picks_setLlmBusy(false);
+        }
+      })
+      .withFailureHandler(e => {
+        console.error(e);
+        picks_setLlmStatus("LLM rank failed: " + (e.message || e));
+        picks_setLlmBusy(false);
+      })
+      .ui_runWeeklyPicksLlmRank_v1({ prompt, maxRows, fetchText, rows });
+  }
+
+  function picks_clearLlm() {
+    PICKS_LLM_RESULTS = {};
+    PICKS_LLM_META = null;
+    document.getElementById("picksSort").value = "default";
+    picks_setLlmStatus("LLM results cleared.");
+    picks_renderFiltered();
+  }
 
   window.addEventListener("error", (ev) => {
     console.error(ev.error || ev);
