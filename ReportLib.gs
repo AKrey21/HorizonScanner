@@ -36,8 +36,8 @@ function rpt_buildTopicsFromLinks_(linksText, opts) {
     const a = rpt_fetchArticleMetaSafe_(finalUrl, inputUrl);
 
     // AI
-    const ai = generateAiBits_(a);
     const sectionTitle = generateAiTopicHeader_(a);
+    const ai = generateAiBits_(a, sectionTitle);
 
     // optional PDF (offline article replica)
     let pdfUrl = "";
@@ -418,26 +418,28 @@ function isBadPublisherCandidate_(u) {
  * 2) AI generation (robust JSON + safe rendering)
  * ========================================================================= */
 
-function generateAiBits_(article) {
+function generateAiBits_(article, themeLabel) {
   const rawSource = (article.description || article.text || "");
   const sourceText = cleanForModel_(rawSource).slice(0, 9000);
+  const theme = String(themeLabel || "").trim();
 
   if (!sourceText || sourceText.length < 80) {
     return fallbackAi_(article);
   }
 
   const prompt = `
-You are writing a MOM Singapore FutureScans weekly brief.
+You are writing a short FutureScans-style article write-up for a MOM Singapore weekly brief.
 
 Given the article:
+THEME: ${theme || "Unknown"}
 TITLE: ${article.title}
 URL: ${article.url}
 TEXT (may be partial): ${sourceText}
 
 Return STRICT JSON only with:
 {
-  "relevance20": "Exactly 20 words, how this is relevant to Singapore/MOM (labour, manpower, employment, workplace).",
-  "summary80": "About 80 words total. Include 1-2 key points that are important and measurable.",
+  "relevance20": "One sentence, 30–40 words, starting with 'This article', stating what it covers with a workforce/manpower lens.",
+  "summary80": "One paragraph, 80–90 words, covering what is happening, who is affected, what mechanisms or policies are involved, and the key workforce implications. No bullets.",
   "boldPhrases": ["1-2 short phrases to bold inside summary80 (must appear verbatim in summary80)"]
 }
 
@@ -445,7 +447,11 @@ Rules:
 - Output JSON only (no markdown fences, no commentary).
 - Use double quotes for JSON keys/strings.
 - Do not invent statistics.
-- Keep it policy/workforce focused.
+- Keep it policy/workforce focused (labour supply, participation, skills, wages, hiring, mobility, productivity, job quality, inclusion, employer constraints, training pathways).
+- Use clear, neutral, professional UK English.
+- No recommendations or moralising.
+- Avoid partisan/political framing unless essential to the policy signal.
+- Use proper terms in full on first mention (e.g., Science, Technology, Engineering, and Mathematics (STEM)).
 `.trim();
 
   let raw = "";
@@ -650,7 +656,7 @@ function fallbackAi_(article) {
 }
 
 function fallbackRelevance20_() {
-  return "Relevant to Singapore workforce planning and labour market monitoring, offering signals on hiring, wages, job quality, and policy responses.";
+  return "This article covers a labour market development with implications for workforce planning, highlighting impacts on hiring, wages, job quality, and policy responses relevant to Singapore.";
 }
 
 /* =========================================================================
