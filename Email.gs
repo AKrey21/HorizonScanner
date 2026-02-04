@@ -259,6 +259,15 @@ function buildEmailFromWordTemplate_v2_(topics, weekLabel, options) {
         if (isOutlookInlineImageMime_(mime)) {
           imgCid = `fs_img_${topicNo}`;
           inlineImages.push({ cid: imgCid, blob: blob, filename: imgCid });
+        } else {
+          const proxied = tryFetchProxyImageBlob_(t.imageUrl);
+          if (proxied) {
+            const proxyMime = (proxied.getContentType && proxied.getContentType()) || "";
+            if (isOutlookInlineImageMime_(proxyMime)) {
+              imgCid = `fs_img_${topicNo}`;
+              inlineImages.push({ cid: imgCid, blob: proxied, filename: imgCid });
+            }
+          }
         }
       }
       if (!imgCid) {
