@@ -280,12 +280,48 @@
           background: rgba(125,178,255,.08);
           font-family: inherit;
         }
+        .rep_previewApproved{
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 12px 14px;
+          margin: 14px 0 18px;
+          background: #f7f9ff;
+        }
+        .rep_previewApprovedTitle{
+          font-size: 13px;
+          font-weight: 700;
+          color: #1b2a3b;
+          margin-bottom: 8px;
+          letter-spacing: .02em;
+          text-transform: uppercase;
+        }
+        .rep_previewApprovedItem{
+          border: 1px dashed rgba(125,178,255,.4);
+          border-radius: 10px;
+          padding: 10px;
+          margin-bottom: 10px;
+          background: #fff;
+        }
+        .rep_previewApprovedItem:last-child{
+          margin-bottom: 0;
+        }
         .rep_previewInsert .rep_cardTitle{
           color: #1b2a3b;
           font-size: 13px;
           font-weight: 600;
         }
         .rep_previewInsert .rep_cardMeta{
+          font-size: 11px;
+          color: var(--muted2);
+          margin-top: 6px;
+          word-break: break-all;
+        }
+        .rep_previewApprovedItem .rep_cardTitle{
+          color: #1b2a3b;
+          font-size: 13px;
+          font-weight: 600;
+        }
+        .rep_previewApprovedItem .rep_cardMeta{
           font-size: 11px;
           color: var(--muted2);
           margin-top: 6px;
@@ -305,6 +341,7 @@
     wrapper.className = "rep_previewBody";
     wrapper.innerHTML = html || '<span>No output returned.</span>';
     root.appendChild(wrapper);
+    fsReport_ensureApprovedSlot();
   }
 
   function fsReport_wirePreviewDropZone(){
@@ -336,22 +373,53 @@
   }
 
   function fsReport_insertPreviewCard(data){
-    const root = fsReport_getPreviewRoot();
-    if (!root) return;
-    let container = root.querySelector("#rep_previewCards");
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "rep_previewCards";
-      root.prepend(container);
-    }
-
+    const slot = fsReport_ensureApprovedSlot();
+    if (!slot) return;
+    const list = slot.querySelector(".rep_previewApprovedList");
+    if (!list) return;
     const card = document.createElement("div");
-    card.className = "rep_previewInsert";
+    card.className = "rep_previewApprovedItem";
     card.innerHTML = `
       <div class="rep_cardTitle">${data.title || "Approved article"}</div>
       <div class="rep_cardMeta">${data.url || ""}</div>
     `;
-    container.appendChild(card);
+    list.appendChild(card);
+  }
+
+  function fsReport_ensureApprovedSlot(){
+    const root = fsReport_getPreviewRoot();
+    if (!root) return null;
+    const body = root.querySelector(".rep_previewBody");
+    if (!body) return null;
+    let slot = body.querySelector("#rep_previewApprovedSlot");
+    if (slot) return slot;
+
+    slot = document.createElement("div");
+    slot.id = "rep_previewApprovedSlot";
+    slot.className = "rep_previewApproved";
+    slot.innerHTML = `
+      <div class="rep_previewApprovedTitle">Approved picks</div>
+      <div class="rep_previewApprovedList"></div>
+    `;
+
+    const anchor = fsReport_findTopicAnchor(body);
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(slot, anchor);
+    } else {
+      body.appendChild(slot);
+    }
+    return slot;
+  }
+
+  function fsReport_findTopicAnchor(body){
+    const candidates = Array.from(body.querySelectorAll("div"));
+    for (const div of candidates) {
+      const text = (div.textContent || "").trim();
+      if (!text.includes("<Topic>")) continue;
+      const block = div.closest("div[style*='border:1px solid']") || div;
+      return block;
+    }
+    return null;
   }
 
   function fsReport_renderApprovedCards(lines){
