@@ -100,6 +100,27 @@ function ingest_setupDailyRawIngestTrigger_() {
   return { ok: true, handler: handlerName, atHour: 12 };
 }
 
+/**
+ * Ensures a daily trigger exists for ingest_dailyRawArticles_.
+ * Safe to call on open; only creates a trigger if missing.
+ */
+function ingest_ensureDailyRawIngestTrigger_() {
+  var handlerName = "ingest_dailyRawArticles_";
+  var triggers = ScriptApp.getProjectTriggers();
+  var existing = triggers.some(function (t) {
+    return t.getHandlerFunction && t.getHandlerFunction() === handlerName;
+  });
+  if (existing) {
+    return { ok: true, handler: handlerName, created: false };
+  }
+  ScriptApp.newTrigger(handlerName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(12)
+    .create();
+  return { ok: true, handler: handlerName, created: true, atHour: 12 };
+}
+
 /* ========= MAIN INGEST ========= */
 
 /**
