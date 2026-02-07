@@ -272,24 +272,13 @@
         .MsoNormalTable th[width]{ width:auto !important; }
         .MsoNormalTable img{ width:100% !important; max-width:100%; height:auto !important; }
         a{ color: var(--link); }
-        .rep_previewInsert{
-          border: 1px dashed rgba(125,178,255,.6);
-          border-radius: 10px;
-          padding: 10px;
-          margin-bottom: 12px;
-          background: rgba(125,178,255,.08);
-          font-family: inherit;
+        .rep_topicDropTarget{
+          position: relative;
         }
-        .rep_previewInsert .rep_cardTitle{
-          color: #1b2a3b;
-          font-size: 13px;
-          font-weight: 600;
-        }
-        .rep_previewInsert .rep_cardMeta{
-          font-size: 11px;
-          color: var(--muted2);
-          margin-top: 6px;
-          word-break: break-all;
+        .rep_topicDropTarget.is-topicDrop{
+          outline: 2px dashed rgba(125,178,255,.7);
+          outline-offset: 2px;
+          box-shadow: 0 0 0 4px rgba(125,178,255,.15);
         }
       `;
       output.shadowRoot.appendChild(style);
@@ -305,6 +294,7 @@
     wrapper.className = "rep_previewBody";
     wrapper.innerHTML = html || '<span>No output returned.</span>';
     root.appendChild(wrapper);
+    fsReport_wirePreviewTopicDrops();
   }
 
   function fsReport_wirePreviewDropZone(){
@@ -324,34 +314,55 @@
     outputWrap.addEventListener("drop", event => {
       event.preventDefault();
       outputWrap.classList.remove("is-dropTarget");
-      const payload = event.dataTransfer.getData("text/plain");
-      if (!payload) return;
-      try {
-        const data = JSON.parse(payload);
-        fsReport_insertPreviewCard(data);
-      } catch (err) {
-        fsReport_insertPreviewCard({ title: "Approved article", url: payload });
-      }
+      fsReport_setErr("Drop approved picks onto a <Topic> block to replace it.");
     });
   }
 
-  function fsReport_insertPreviewCard(data){
+  function fsReport_wirePreviewTopicDrops(){
     const root = fsReport_getPreviewRoot();
     if (!root) return;
-    let container = root.querySelector("#rep_previewCards");
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "rep_previewCards";
-      root.prepend(container);
-    }
+    const blocks = fsReport_getTopicBlocks(root);
+    blocks.forEach((block, index) => {
+      block.dataset.topicIndex = String(index);
+      block.classList.add("rep_topicDropTarget");
+      block.addEventListener("dragover", event => {
+        event.preventDefault();
+        block.classList.add("is-topicDrop");
+      });
+      block.addEventListener("dragleave", () => {
+        block.classList.remove("is-topicDrop");
+      });
+      block.addEventListener("drop", event => {
+        event.preventDefault();
+        block.classList.remove("is-topicDrop");
+        const payload = event.dataTransfer.getData("text/plain");
+        if (!payload) return;
+        let data = { title: "Approved article", url: payload };
+        try {
+          data = JSON.parse(payload);
+        } catch (err) {
+          data = { title: "Approved article", url: payload };
+        }
+        fsReport_replaceTopicWithApproved(index, data);
+      });
+    });
+  }
 
-    const card = document.createElement("div");
-    card.className = "rep_previewInsert";
-    card.innerHTML = `
-      <div class="rep_cardTitle">${data.title || "Approved article"}</div>
-      <div class="rep_cardMeta">${data.url || ""}</div>
-    `;
-    container.appendChild(card);
+  function fsReport_getTopicBlocks(root){
+    const body = root.querySelector(".rep_previewBody");
+    if (!body) return [];
+    return Array.from(body.querySelectorAll("div[style*='border:1px solid']"))
+      .filter(div => (div.textContent || "").includes("<Topic>"));
+  }
+
+  function fsReport_replaceTopicWithApproved(index, data){
+    const url = data && (data.url || data.link || data.href);
+    if (!url) return;
+    const lines = fsReport_getLinksLines();
+    while (lines.length <= index) lines.push("");
+    lines[index] = url;
+    document.getElementById("rep_linksInput").value = lines.join("\n");
+    fsReport_generateReport();
   }
 
   function fsReport_renderApprovedCards(lines){
