@@ -1,6 +1,14 @@
 # HorizonScanner
 Horizon Scanner
 
+## Daily raw article ingestion
+Raw article ingestion runs on a time-based trigger in Apps Script. There are two ways to ensure it runs daily:
+
+1. Open the spreadsheet and use the **HorizonScanner → Install daily raw ingest trigger** menu item.
+2. Keep the spreadsheet opened periodically; on open it attempts to ensure the daily trigger exists.
+
+You can also use **HorizonScanner → Check raw ingest trigger status** to verify the trigger is installed.
+
 ## AI provider toggle (Gemini/OpenAI)
 Set these Script Properties (Apps Script → Project Settings → Script Properties) to switch providers and control model usage:
 

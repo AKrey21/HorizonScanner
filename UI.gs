@@ -13,6 +13,53 @@
 const SPREADSHEET_ID = "1TZ6QknTE3LLQtn34UrzOYRHOakZG_QlhyGtruooNGW4";
 const THEME_RULES_START_ROW = 5; // ThemeRules data starts at row 5
 
+function onOpen() {
+  try {
+    if (typeof ingest_ensureDailyRawIngestTrigger_ === "function") {
+      ingest_ensureDailyRawIngestTrigger_();
+    }
+    ui_addHorizonScannerMenu_();
+  } catch (err) {
+    console.log("Failed to ensure daily raw ingest trigger:", err);
+  }
+}
+
+function ui_addHorizonScannerMenu_() {
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu("HorizonScanner")
+      .addItem("Install daily raw ingest trigger", "ui_installDailyRawIngestTrigger_")
+      .addItem("Check raw ingest trigger status", "ui_checkDailyRawIngestTrigger_")
+      .addToUi();
+  } catch (err) {
+    console.log("Failed to create HorizonScanner menu:", err);
+  }
+}
+
+function ui_installDailyRawIngestTrigger_() {
+  if (typeof ingest_setupDailyRawIngestTrigger_ !== "function") {
+    SpreadsheetApp.getUi().alert("Ingest setup function not available.");
+    return;
+  }
+  var res = ingest_setupDailyRawIngestTrigger_();
+  SpreadsheetApp.getUi().alert(
+    "Daily raw ingest trigger installed.\nHandler: " + res.handler + "\nHour: " + res.atHour
+  );
+}
+
+function ui_checkDailyRawIngestTrigger_() {
+  var handlerName = "ingest_dailyRawArticles_";
+  var triggers = ScriptApp.getProjectTriggers();
+  var exists = triggers.some(function (t) {
+    return t.getHandlerFunction && t.getHandlerFunction() === handlerName;
+  });
+  SpreadsheetApp.getUi().alert(
+    exists
+      ? "Daily raw ingest trigger is installed."
+      : "Daily raw ingest trigger is not installed."
+  );
+}
+
 // ✅ Web App entry — MUST use template evaluate() or your <? ?> includes will print as text
 function doGet() {
   const t = HtmlService.createTemplateFromFile("index");
