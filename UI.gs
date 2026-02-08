@@ -28,6 +28,7 @@ function ui_addHorizonScannerMenu_() {
   try {
     SpreadsheetApp.getUi()
       .createMenu("HorizonScanner")
+      .addItem("Run daily raw ingest now", "ui_runDailyRawIngestNow_")
       .addItem("Install daily raw ingest trigger", "ui_installDailyRawIngestTrigger_")
       .addItem("Check raw ingest trigger status", "ui_checkDailyRawIngestTrigger_")
       .addToUi();
@@ -53,11 +54,66 @@ function ui_checkDailyRawIngestTrigger_() {
   var exists = triggers.some(function (t) {
     return t.getHandlerFunction && t.getHandlerFunction() === handlerName;
   });
+  var lastRun = "";
+  var lastStatus = "";
+  var lastMessage = "";
+  var lastRuntime = "";
+  var lastStoppedEarly = "";
+  var lastErrors = "";
+  try {
+    var props = PropertiesService.getScriptProperties();
+    lastRun = props.getProperty("RAW_INGEST_LAST_RUN") || "";
+    lastStatus = props.getProperty("RAW_INGEST_LAST_STATUS") || "";
+    lastMessage = props.getProperty("RAW_INGEST_LAST_MESSAGE") || "";
+    lastRuntime = props.getProperty("RAW_INGEST_LAST_RUNTIME_MS") || "";
+    lastStoppedEarly = props.getProperty("RAW_INGEST_LAST_STOPPED_EARLY") || "";
+    lastErrors = props.getProperty("RAW_INGEST_LAST_ERRORS") || "";
+  } catch (err) {
+    console.log("Failed to read RAW_INGEST_LAST_RUN:", err);
+  }
+  var status = exists
+    ? "Daily raw ingest trigger is installed."
+    : "Daily raw ingest trigger is not installed.";
+  if (lastRun) {
+    status += "\nLast run: " + lastRun;
+  }
+  if (lastStatus) {
+    status += "\nLast status: " + lastStatus;
+  }
+  if (lastRuntime) {
+    status += "\nLast runtime (ms): " + lastRuntime;
+  }
+  if (lastStoppedEarly === "true") {
+    status += "\nStopped early to avoid time limit.";
+  }
+  if (lastMessage) {
+    status += "\nLast message: " + lastMessage;
+  }
+  if (lastErrors) {
+    status += "\nLast errors: " + lastErrors;
+  }
   SpreadsheetApp.getUi().alert(
-    exists
-      ? "Daily raw ingest trigger is installed."
-      : "Daily raw ingest trigger is not installed."
+    status
   );
+}
+
+function ui_runDailyRawIngestNow_() {
+  if (typeof ingest_dailyRawArticles_ !== "function") {
+    SpreadsheetApp.getUi().alert("Daily ingest function not available.");
+    return;
+  }
+  var res;
+  try {
+    res = ingest_dailyRawArticles_();
+  } catch (err) {
+    SpreadsheetApp.getUi().alert("Daily ingest failed to run: " + (err && err.message ? err.message : err));
+    return;
+  }
+  var summary = res && res.message ? res.message : "Daily ingest completed.";
+  if (res && res.errors && res.errors.length) {
+    summary += "\nErrors: " + res.errors.slice(0, 3).join(" | ");
+  }
+  SpreadsheetApp.getUi().alert(summary);
 }
 
 // ✅ Web App entry — MUST use template evaluate() or your <? ?> includes will print as text

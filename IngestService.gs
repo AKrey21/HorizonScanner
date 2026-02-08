@@ -78,6 +78,26 @@ function ingest_dailyRawArticles_() {
   var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
   ingestRes.prune = pruneStats;
   ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty("RAW_INGEST_LAST_RUN", new Date().toISOString());
+    props.setProperty("RAW_INGEST_LAST_STATUS", ingestRes.ok ? "ok" : "error");
+    props.setProperty("RAW_INGEST_LAST_MESSAGE", String(ingestRes.message || ""));
+    props.setProperty(
+      "RAW_INGEST_LAST_RUNTIME_MS",
+      String((ingestRes.stats && ingestRes.stats.runtimeMs) || "")
+    );
+    props.setProperty(
+      "RAW_INGEST_LAST_STOPPED_EARLY",
+      (ingestRes.stats && ingestRes.stats.stoppedEarly) ? "true" : "false"
+    );
+    props.setProperty(
+      "RAW_INGEST_LAST_ERRORS",
+      Array.isArray(ingestRes.errors) ? ingestRes.errors.slice(0, 3).join(" | ") : ""
+    );
+  } catch (e) {
+    console.log("Failed to record RAW_INGEST_LAST_RUN:", e);
+  }
   return ingestRes;
 }
 
@@ -167,10 +187,12 @@ function ingest_importRSS_(daysBack) {
     };
 
     if (!feeds.length) {
+      stats.runtimeMs = Date.now() - t0;
       return { ok:false, message:'No active feeds found in "' + ING_CFG.FEEDS_SHEET + '".', stats:stats, errors:errors, debug:debug };
     }
 
     if (!themeRules.length && !ingest_shouldIngestAll_()) {
+      stats.runtimeMs = Date.now() - t0;
       return { ok:false, message:'No active ThemeRules found in "' + ING_CFG.CONTROL_SHEET + '" (and INGEST_ALL_ARTICLES is false).', stats:stats, errors:errors, debug:debug };
     }
 
@@ -377,6 +399,7 @@ function ingest_importRSS_(daysBack) {
     };
 
   } catch (err) {
+    stats.runtimeMs = Date.now() - t0;
     return {
       ok: false,
       message: (err && err.message) ? err.message : String(err),
