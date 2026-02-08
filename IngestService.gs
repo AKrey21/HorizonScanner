@@ -53,6 +53,25 @@ function ui_importRSS_7days_v2()  {
   res._sig = "IngestService.ui_importRSS_7days_v2 @ 2026-01-13";
   return res;
 }
+function ui_importRSS_daily_v1() {
+  var res;
+  try {
+    res = ingest_dailyRawArticles_();
+  } catch (err) {
+    var msg = (err && err.message) ? err.message : String(err || "Unknown error");
+    return { ok: false, message: msg, errors: [msg], _sig: "IngestService.ui_importRSS_daily_v1 @ 2026-01-13" };
+  }
+  if (!res || typeof res.ok === "undefined") {
+    return {
+      ok: false,
+      message: "Daily ingest returned no response object.",
+      errors: ["Daily ingest returned no response object."],
+      _sig: "IngestService.ui_importRSS_daily_v1 @ 2026-01-13"
+    };
+  }
+  res._sig = "IngestService.ui_importRSS_daily_v1 @ 2026-01-13";
+  return res;
+}
 function ui_importRSS_30days_v2() {
   var res = ingest_importRSS_(30);
   res._sig = "IngestService.ui_importRSS_30days_v2 @ 2026-01-13";
