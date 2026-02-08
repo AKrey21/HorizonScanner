@@ -1023,7 +1023,7 @@
     raw_runRpc(
       "Ingesting RSS",
       (gs) => {
-        if (range === "daily") gs.ingest_dailyRawArticles_();
+        if (range === "daily") gs.ui_importRSS_daily_v1();
         else if (range === "30") gs.ui_importRSS_30days_v2();
         else if (range === "all") gs.ui_importRSS_all_v2();
         else gs.ui_importRSS_7days_v2();
