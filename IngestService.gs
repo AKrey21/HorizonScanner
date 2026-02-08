@@ -75,9 +75,33 @@ function ui_importRSS_ping() {
  */
 function ingest_dailyRawArticles_() {
   var pruneStats = repo_pruneRawArticlesByAge_(ING_CFG.INGEST_PRUNE_DAYS);
-  var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
+  var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK, {
+    maxRuntimeMs: 240000,
+    fetchTimeoutMs: 8000,
+    fetchBatchSize: 8
+  });
   ingestRes.prune = pruneStats;
   ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty("RAW_INGEST_LAST_RUN", new Date().toISOString());
+    props.setProperty("RAW_INGEST_LAST_STATUS", ingestRes.ok ? "ok" : "error");
+    props.setProperty("RAW_INGEST_LAST_MESSAGE", String(ingestRes.message || ""));
+    props.setProperty(
+      "RAW_INGEST_LAST_RUNTIME_MS",
+      String((ingestRes.stats && ingestRes.stats.runtimeMs) || "")
+    );
+    props.setProperty(
+      "RAW_INGEST_LAST_STOPPED_EARLY",
+      (ingestRes.stats && ingestRes.stats.stoppedEarly) ? "true" : "false"
+    );
+    props.setProperty(
+      "RAW_INGEST_LAST_ERRORS",
+      Array.isArray(ingestRes.errors) ? ingestRes.errors.slice(0, 3).join(" | ") : ""
+    );
+  } catch (e) {
+    console.log("Failed to record RAW_INGEST_LAST_RUN:", e);
+  }
   return ingestRes;
 }
 
@@ -100,14 +124,36 @@ function ingest_setupDailyRawIngestTrigger_() {
   return { ok: true, handler: handlerName, atHour: 12 };
 }
 
+/**
+ * Ensures a daily trigger exists for ingest_dailyRawArticles_.
+ * Safe to call on open; only creates a trigger if missing.
+ */
+function ingest_ensureDailyRawIngestTrigger_() {
+  var handlerName = "ingest_dailyRawArticles_";
+  var triggers = ScriptApp.getProjectTriggers();
+  var existing = triggers.some(function (t) {
+    return t.getHandlerFunction && t.getHandlerFunction() === handlerName;
+  });
+  if (existing) {
+    return { ok: true, handler: handlerName, created: false };
+  }
+  ScriptApp.newTrigger(handlerName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(12)
+    .create();
+  return { ok: true, handler: handlerName, created: true, atHour: 12 };
+}
+
 /* ========= MAIN INGEST ========= */
 
 /**
  * Main ingest runner
  * Returns: { ok, message, stats, errors[], debug? }
  */
-function ingest_importRSS_(daysBack) {
+function ingest_importRSS_(daysBack, opts) {
   var t0 = Date.now();
+  var overrides = opts || {};
 
   var stats = {
     daysBack: daysBack,
@@ -146,10 +192,12 @@ function ingest_importRSS_(daysBack) {
     };
 
     if (!feeds.length) {
+      stats.runtimeMs = Date.now() - t0;
       return { ok:false, message:'No active feeds found in "' + ING_CFG.FEEDS_SHEET + '".', stats:stats, errors:errors, debug:debug };
     }
 
     if (!themeRules.length && !ingest_shouldIngestAll_()) {
+      stats.runtimeMs = Date.now() - t0;
       return { ok:false, message:'No active ThemeRules found in "' + ING_CFG.CONTROL_SHEET + '" (and INGEST_ALL_ARTICLES is false).', stats:stats, errors:errors, debug:debug };
     }
 
@@ -162,8 +210,9 @@ function ingest_importRSS_(daysBack) {
     var seenLinks = ingest_buildExistingLinkSet_();
 
     var allRowsToWrite = [];
-    var maxRuntimeMs = ING_CFG.INGEST_MAX_RUNTIME_MS;
-    var batchSize = Math.max(1, ING_CFG.INGEST_FETCH_BATCH_SIZE || 1);
+    var maxRuntimeMs = Number(overrides.maxRuntimeMs || ING_CFG.INGEST_MAX_RUNTIME_MS);
+    var batchSize = Math.max(1, Number(overrides.fetchBatchSize || ING_CFG.INGEST_FETCH_BATCH_SIZE || 1));
+    var fetchTimeoutMs = Number(overrides.fetchTimeoutMs || ING_CFG.INGEST_FETCH_TIMEOUT_MS);
 
     for (var start = 0; start < feeds.length; start += batchSize) {
       if (maxRuntimeMs && (Date.now() - t0) > maxRuntimeMs) {
@@ -181,7 +230,7 @@ function ingest_importRSS_(daysBack) {
       var fetchOptions = {
         muteHttpExceptions: true,
         followRedirects: true,
-        timeout: ING_CFG.INGEST_FETCH_TIMEOUT_MS,
+        timeout: fetchTimeoutMs,
         headers: {
           "User-Agent": "Mozilla/5.0",
           "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.7"
@@ -356,6 +405,7 @@ function ingest_importRSS_(daysBack) {
     };
 
   } catch (err) {
+    stats.runtimeMs = Date.now() - t0;
     return {
       ok: false,
       message: (err && err.message) ? err.message : String(err),
