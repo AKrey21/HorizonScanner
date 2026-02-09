@@ -368,15 +368,98 @@
       display:none;
     }
 
-    .card-body,
-    .card-footer{
-      background: var(--fs-card);
-    }
-
     .meta{
       color:var(--fs-muted);
       font-size:12px;
       letter-spacing:.2px;
+    }
+
+    .tableWrap{
+      border-radius:16px;
+      border:1px solid var(--fs-border);
+      background: rgba(9,26,56,.85);
+      box-shadow: var(--fs-shadow-soft);
+      overflow:auto;
+    }
+
+    table.rawTable{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      min-width:960px;
+      color:var(--fs-text);
+      font-size:12px;
+    }
+
+    table.rawTable th,
+    table.rawTable td{
+      padding:10px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      vertical-align:top;
+    }
+
+    table.rawTable th{
+      text-align:left;
+      font-weight:600;
+      font-size:11px;
+      letter-spacing:.4px;
+      text-transform:uppercase;
+      color:var(--fs-muted);
+      background: rgba(13,34,71,.98);
+      position:sticky;
+      top:0;
+      z-index:2;
+    }
+
+    table.rawTable tbody tr:hover{
+      background: rgba(255,255,255,.03);
+    }
+
+    .cell-title a{
+      color:var(--fs-text);
+      text-decoration:none;
+      font-weight:600;
+    }
+
+    .cell-title a:hover{
+      text-decoration:underline;
+    }
+
+    .llmBadge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+      border:1px solid transparent;
+    }
+    .llmBadge--publish{
+      background: rgba(37,130,80,.2);
+      color:#baf7d4;
+      border-color: rgba(37,130,80,.5);
+    }
+    .llmBadge--maybe{
+      background: rgba(223,149,38,.18);
+      color:#ffd9a1;
+      border-color: rgba(223,149,38,.5);
+    }
+    .llmBadge--skip{
+      background: rgba(196,73,73,.2);
+      color:#ffc7c7;
+      border-color: rgba(196,73,73,.5);
+    }
+    .llmBadge--unknown{
+      background: rgba(255,255,255,.08);
+      color:var(--fs-muted);
+      border-color: rgba(255,255,255,.15);
+    }
+
+    .llmScore{
+      font-weight:600;
     }
 
     /* Responsive: stack sidebar above table */
@@ -388,8 +471,8 @@
   <div class="top-section">
     <div class="page-head">
       <div>
-        <div class="page-title">Raw Articles</div>
-        <div class="page-sub">Filter, triage, and scan incoming sources in one place.</div>
+        <div class="page-title">All Articles</div>
+        <div class="page-sub">Unified view with LLM scoring + recommendations.</div>
       </div>
       <div class="head-actions">
         <span class="stat-pill">Live feed</span>
@@ -456,9 +539,17 @@
             <option value="themeAsc">Theme (A→Z)</option>
             <option value="poiAsc">POI (A→Z)</option>
             <option value="titleAsc">Title (A→Z)</option>
+            <option value="llmScoreDesc">LLM score (high → low)</option>
           </select>
           <input id="raw-dateFrom" type="date" title="Date from"/>
           <input id="raw-dateTo" type="date" title="Date to"/>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <label class="chk" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="raw-llmRecOnly"/>
+            LLM recommended only
+          </label>
+          <span class="pill">Uses latest LLM rank cache</span>
         </div>
         <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in table to quick-filter</div>
       </div>
@@ -525,7 +616,9 @@
       <div class="meta" id="raw-meta">Loading…</div>
 
       <div class="wrap" id="raw-wrap">
-        <div class="cards" id="raw-cards"></div>
+        <div class="tableWrap">
+          <table class="rawTable" id="raw-table"></table>
+        </div>
         <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
       </div>
 
@@ -561,7 +654,7 @@
     selKwInc: new Set(),
     selKwExc: new Set(),
 
-    rowH: 220 // used for Fit screen estimate; refined after render
+    rowH: 56 // used for Fit screen estimate; refined after render
   };
 
   const R = (id) => document.getElementById(id);
@@ -785,6 +878,7 @@
     const kwInc  = rawState.selKwInc;
     const kwExc  = rawState.selKwExc;
     const kwMode = (R("raw-kwMode").value || "any");
+    const llmRecOnly = !!R("raw-llmRecOnly").checked;
 
     let filtered = rawState.allRows.filter(r => {
       if (themes.size && !themes.has(r.theme)) return false;
@@ -817,6 +911,7 @@
       if (q) {
         if (!r.searchText || !r.searchText.includes(q)) return false;
       }
+      if (llmRecOnly && !r.llmRecommended) return false;
       return true;
     });
 
@@ -829,6 +924,7 @@
     if (sv === "themeAsc") filtered.sort((a,b)=> cmpStr(a.theme,b.theme));
     if (sv === "poiAsc")   filtered.sort((a,b)=> cmpStr(a.poi,b.poi));
     if (sv === "titleAsc") filtered.sort((a,b)=> cmpStr(a.title,b.title));
+    if (sv === "llmScoreDesc") filtered.sort((a,b)=> (Number(b.llmScore || -1) - Number(a.llmScore || -1)));
     rawState.filtered = filtered;
 
     raw_updateSummary();
@@ -842,6 +938,7 @@
     if (rawState.selSource.size) parts.push(`Source: ${rawState.selSource.size}`);
     if (rawState.selKwInc.size)  parts.push(`Include: ${rawState.selKwInc.size} (${(R("raw-kwMode").value||"any").toUpperCase()})`);
     if (rawState.selKwExc.size)  parts.push(`Exclude: ${rawState.selKwExc.size}`);
+    if (R("raw-llmRecOnly").checked) parts.push("LLM recommended");
     if ((R("raw-dateFrom").value||"") || (R("raw-dateTo").value||"")) parts.push("Date range");
     if ((R("raw-q").value||"").trim()) parts.push("Search");
     R("raw-summary").querySelector("span").innerHTML =
@@ -873,7 +970,22 @@
     const empty = R("raw-empty");
     empty.style.display = total ? "none" : "block";
 
-    R("raw-cards").innerHTML = slice.map(r => {
+    const header = `
+      <thead>
+        <tr>
+          <th style="width:110px;">Date</th>
+          <th>Title</th>
+          <th style="width:140px;">Source</th>
+          <th style="width:140px;">Theme</th>
+          <th style="width:140px;">POI</th>
+          <th style="width:110px;">LLM Score</th>
+          <th style="width:140px;">LLM Rec</th>
+          <th style="width:220px;">Keywords</th>
+        </tr>
+      </thead>
+    `;
+
+    const body = slice.map(r => {
       const title = raw_escape(r.title || "");
       const link = (r.link || "").trim();
       const dateLabel = raw_escape(r.dateDisplay || "No date");
@@ -884,43 +996,39 @@
       const srcRaw = String(r.source || "");
       const thmRaw = String(r.theme || "");
       const poiRaw = String(r.poi || "");
-      const descParts = [];
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
       const kws = (r.keywordsList || []).slice(0, 8)
         .map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
 
       const tag = (kind, value) => value
         ? `<span class="tag clickable" data-kind="${kind}" data-v="${raw_attr(value)}">${raw_escape(value)}</span>`
-        : "";
+        : "—";
+
+      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
+      const recRaw = String(r.llmRecommendation || "").trim();
+      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
+      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
+      const recLabel = recRaw || "Unknown";
 
       return `
-        <article class="card">
-          <div class="card-media">
-            <span class="card-date">${dateLabel}</span>
-          </div>
-          <div class="card-body">
-            <div class="card-title">${titleHtml}</div>
-            <div class="card-desc">${desc}</div>
-            <div class="card-tags">
-              ${tag("source", srcRaw)}
-              ${tag("theme", thmRaw)}
-              ${tag("poi", poiRaw)}
-            </div>
-          </div>
-          <div class="card-footer">
-            ${kws}
-          </div>
-        </article>
+        <tr>
+          <td>${dateLabel}</td>
+          <td class="cell-title">${titleHtml}</td>
+          <td>${tag("source", srcRaw)}</td>
+          <td>${tag("theme", thmRaw)}</td>
+          <td>${tag("poi", poiRaw)}</td>
+          <td class="llmScore">${llmScore}</td>
+          <td><span class="llmBadge llmBadge--${recClass}">${raw_escape(recLabel)}</span></td>
+          <td>${kws || "—"}</td>
+        </tr>
       `;
     }).join("");
 
+    R("raw-table").innerHTML = header + `<tbody>${body}</tbody>`;
+
     // refine row height for Fit screen mode (after we have rows)
-    const firstCard = R("raw-cards").querySelector(".card");
-    if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
+    const firstRow = R("raw-table").querySelector("tbody tr");
+    if (firstRow && firstRow.offsetHeight) rawState.rowH = firstRow.offsetHeight;
 
     raw_noticeClear();
   }
@@ -931,6 +1039,7 @@
     R("raw-dateTo").value = "";
     R("raw-sort").value = "dateDesc";
     R("raw-kwMode").value = "any";
+    R("raw-llmRecOnly").checked = false;
 
     rawState.selTheme.clear();
     rawState.selPoi.clear();
@@ -960,7 +1069,7 @@
   }
 
   // quick-filter by clicking cells
-  R("raw-cards").addEventListener("click", (e) => {
+  R("raw-table").addEventListener("click", (e) => {
     const t = e.target;
     if (!t || !t.dataset) return;
     const kind = t.dataset.kind;
@@ -985,6 +1094,7 @@
   ["raw-pageSize","raw-sort","raw-dateFrom","raw-dateTo","raw-kwMode"].forEach(id => {
     R(id).addEventListener("change", () => raw_apply(true));
   });
+  R("raw-llmRecOnly").addEventListener("change", () => raw_apply(true));
 
   // Fit screen: refresh on resize (debounced)
   window.addEventListener("resize", () => {
