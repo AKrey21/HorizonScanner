@@ -5,7 +5,7 @@
 
   <div class="grid">
     <!-- LEFT: Config -->
-    <div class="card">
+    <div class="card cardConfig">
       <h3>Scoring Config (JSON)</h3>
       <p class="muted">Edit the config JSON directly. Save → Run scoring → Refresh picks.</p>
 
@@ -47,7 +47,7 @@
     </div>
 
     <!-- RIGHT: Weekly Picks -->
-    <div class="card">
+    <div class="card cardPicks">
       <h3>Top Picks (Weekly Picks sheet)</h3>
       <div class="row">
         <label>Quick filter</label>
@@ -92,13 +92,12 @@ Highlight policy levers and workforce risks for 2025-2030.'
   .picksRoot { padding: 16px; font-family: Arial, sans-serif; }
   .picksRoot .grid {
     display: grid;
-    grid-template-columns: 520px 1fr;
+    grid-template-columns: 1fr;
     gap: 16px;
     align-items: start;
   }
-  @media (max-width: 1200px){
-    .picksRoot .grid { grid-template-columns: 1fr; }
-  }
+  .picksRoot .cardPicks { order: 1; }
+  .picksRoot .cardConfig { order: 2; }
 
   .picksRoot .card { background: #111; color: #eee; border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px; }
   .picksRoot h2, .picksRoot h3 { margin: 0 0 10px 0; }
