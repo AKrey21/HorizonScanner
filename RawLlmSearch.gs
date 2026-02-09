@@ -358,6 +358,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           key: row.link || row.title,
           title: article.title,
           url: article.url,
+          theme: article.theme,
+          poi: article.poi,
           llm,
           row_index: i
         });
@@ -422,6 +424,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           key: candidate.key,
           title: article.title,
           url: article.url,
+          theme: article.theme,
+          poi: article.poi,
           llm
         });
       } catch (err) {
@@ -551,7 +555,7 @@ function raw_writeLlmRankSheet_(payload) {
   const meta = payload?.meta || null;
 
   const cacheSheet = raw_getOrCreateSheet_(RAW_LLM_RANK_SHEET);
-  const headers = ["key", "title", "url", "llm_json"];
+  const headers = ["key", "title", "url", "theme", "poi", "llm_json"];
   cacheSheet.clearContents();
   cacheSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   if (results.length) {
@@ -559,6 +563,8 @@ function raw_writeLlmRankSheet_(payload) {
       item?.key || "",
       item?.title || "",
       item?.url || "",
+      item?.theme || "",
+      item?.poi || "",
       JSON.stringify(item?.llm || {})
     ]));
     cacheSheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
@@ -587,6 +593,8 @@ function raw_readLlmRankSheet_() {
     key: headers.indexOf("key"),
     title: headers.indexOf("title"),
     url: headers.indexOf("url"),
+    theme: headers.indexOf("theme"),
+    poi: headers.indexOf("poi"),
     llm: headers.indexOf("llm_json")
   };
 
@@ -608,6 +616,8 @@ function raw_readLlmRankSheet_() {
       key: String(key),
       title: idx.title >= 0 ? String(row[idx.title] || "") : "",
       url: idx.url >= 0 ? String(row[idx.url] || "") : "",
+      theme: idx.theme >= 0 ? String(row[idx.theme] || "") : "",
+      poi: idx.poi >= 0 ? String(row[idx.poi] || "") : "",
       llm
     });
   }

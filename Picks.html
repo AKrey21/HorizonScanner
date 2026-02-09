@@ -553,11 +553,13 @@ Highlight policy levers and workforce risks for 2025-2030.'
       var fallbackRows = results.map(function (item) {
         return {
           Title: (item && item.title) || "",
-          Link: (item && item.url) || ""
+          Link: (item && item.url) || "",
+          Theme: (item && item.theme) || "",
+          POI: (item && item.poi) || ""
         };
       });
       PICKS_ROWS = fallbackRows;
-      PICKS_HEADERS = ["Title", "Link"];
+      PICKS_HEADERS = ["Title", "Link", "Theme", "POI"];
       PICKS_META = {
         sheetName: "Raw Articles (LLM preview)",
         lastRow: fallbackRows.length ? fallbackRows.length + 1 : 0,
