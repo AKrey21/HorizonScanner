@@ -125,8 +125,14 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; background: #0d0d0d; }
   .picksRoot .llmNote { padding: 8px 10px; font-size: 12px; color: #ddd; background: #151515; border-bottom: 1px solid #333; }
-  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
-  .picksRoot th, .picksRoot td { border-bottom: 1px solid #222; padding: 8px; font-size: 12px; vertical-align: top; }
+  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; table-layout: fixed; }
+  .picksRoot th, .picksRoot td {
+    border-bottom: 1px solid #222;
+    padding: 8px;
+    font-size: 12px;
+    vertical-align: top;
+    word-break: break-word;
+  }
   .picksRoot td { background: #0f0f0f; color: #e8e8e8; }
   .picksRoot tr:nth-child(even) td { background: #121212; }
   .picksRoot th { position: sticky; top: 0; background: #1b1b1b; z-index: 1; text-align: left; color: #f5f5f5; }
@@ -442,7 +448,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     }
 
     var headers = PICKS_HEADERS.length ? PICKS_HEADERS : Object.keys(displayRows[0]);
-    var extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary"] : [];
+    var extraHeaders = useLlm ? ["LLM Score", "LLM Rec", "LLM Summary", "LLM Justification"] : [];
     var finalHeaders = headers.concat(extraHeaders);
 
     var sortedRows = displayRows.slice();
@@ -495,7 +501,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
           var recInfo = picks_getLlmRecInfo(llm);
           html += "<td>" + escapeHtml(llm.final_score != null ? String(llm.final_score) : "") + "</td>";
           html += "<td><span class=\"llmRecBadge " + recInfo.className + "\">" + escapeHtml(recInfo.label) + "</span></td>";
-          html += "<td>" + escapeHtml(llm.summary || "") + "</td>";
+        html += "<td>" + escapeHtml(llm.summary || "") + "</td>";
+        html += "<td>" + escapeHtml(picks_formatLlmJustification(llm)) + "</td>";
         }
         html += "</tr>";
       });
@@ -552,6 +559,12 @@ Highlight policy levers and workforce risks for 2025-2030.'
     if (isMaybe) return { label: "Maybe", className: "llmRecBadge--maybe", isRecommended: true };
     if (isNo) return { label: "Skip", className: "llmRecBadge--no", isRecommended: false };
     return { label: raw ? raw : "Unknown", className: "llmRecBadge--unknown", isRecommended: false };
+  }
+
+  function picks_formatLlmJustification(llm) {
+    var reasons = llm && Array.isArray(llm.score_reasons) ? llm.score_reasons : [];
+    if (reasons.length) return reasons.join(" • ");
+    return (llm && (llm.relevance_sg_mom || llm.justification)) ? String(llm.relevance_sg_mom || llm.justification) : "";
   }
 
   function picks_applyLlmResults(res, options) {
