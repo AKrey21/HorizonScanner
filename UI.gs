@@ -791,6 +791,18 @@ function ui_getRawArticles_bootstrap_v1() {
       keywords: findCol(["matching keywords", "keywords", "matching_keyword"])
     };
 
+    const llmEntriesRaw = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
+    const llmEntries = Array.isArray(llmEntriesRaw) ? llmEntriesRaw : [];
+    const llmByLink = new Map();
+    const llmByTitle = new Map();
+
+    llmEntries.forEach((item) => {
+      const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
+      if (linkNorm) llmByLink.set(linkNorm, item?.llm || {});
+      const titleKey = String(item?.title || "").trim().toLowerCase();
+      if (titleKey) llmByTitle.set(titleKey, item?.llm || {});
+    });
+
     const inc = (obj, key) => { if (!key) return; obj[key] = (obj[key] || 0) + 1; };
 
     const themeCounts = {};
@@ -819,6 +831,15 @@ function ui_getRawArticles_bootstrap_v1() {
       const poi   = (idx.poi   >= 0) ? r[idx.poi]   : "";
       const kwS   = (idx.keywords>=0) ? r[idx.keywords] : "";
 
+      const linkNorm = feeds_normalizeLink_(link);
+      let llm = linkNorm ? llmByLink.get(linkNorm) : null;
+      if (!llm && title) llm = llmByTitle.get(String(title).trim().toLowerCase());
+      llm = llm || {};
+      const llmScoreRaw = Number(llm.final_score);
+      const llmScore = Number.isFinite(llmScoreRaw) ? llmScoreRaw : null;
+      const llmRecommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
+      const llmRecommended = (typeof raw_isLlmRecommended_ === "function") ? raw_isLlmRecommended_(llm) : false;
+
       const kwList = splitKeywords(kwS);
 
       inc(themeCounts, theme);
@@ -837,7 +858,10 @@ function ui_getRawArticles_bootstrap_v1() {
         poi,
         keywords: kwS,
         keywordsList: kwList,
-        searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + kwS).toLowerCase()
+        llmScore,
+        llmRecommendation,
+        llmRecommended,
+        searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + kwS + " " + llmRecommendation).toLowerCase()
       };
     });
 
