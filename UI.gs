@@ -792,7 +792,9 @@ function ui_getRawArticles_bootstrap_v1() {
     };
 
     const llmEntriesRaw = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
-    const llmEntries = Array.isArray(llmEntriesRaw) ? llmEntriesRaw : [];
+    const llmEntries = Array.isArray(llmEntriesRaw)
+      ? llmEntriesRaw
+      : (Array.isArray(llmEntriesRaw?.results) ? llmEntriesRaw.results : []);
     const llmByLink = new Map();
     const llmByTitle = new Map();
 

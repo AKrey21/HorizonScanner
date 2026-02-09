@@ -992,6 +992,22 @@
       if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
       const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
+      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
+      const recRaw = String(r.llmRecommendation || "").trim();
+      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
+      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
+      const recLabel = recRaw || "Unknown";
+      const thumb = raw_buildThumb(link);
+      const mediaStyle = thumb
+        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
+        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
+
+      const descParts = [];
+      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
+      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
+      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
+      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
+
       return `
         <article class="card">
           <div class="card-media" ${mediaStyle}>
