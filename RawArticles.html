@@ -368,15 +368,74 @@
       display:none;
     }
 
-    .card-body,
-    .card-footer{
-      background: var(--fs-card);
-    }
-
     .meta{
       color:var(--fs-muted);
       font-size:12px;
       letter-spacing:.2px;
+    }
+
+    .llmBadge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+      border:1px solid transparent;
+    }
+    .llmBadge--publish{
+      background: rgba(37,130,80,.2);
+      color:#baf7d4;
+      border-color: rgba(37,130,80,.5);
+    }
+    .llmBadge--maybe{
+      background: rgba(223,149,38,.18);
+      color:#ffd9a1;
+      border-color: rgba(223,149,38,.5);
+    }
+    .llmBadge--skip{
+      background: rgba(196,73,73,.2);
+      color:#ffc7c7;
+      border-color: rgba(196,73,73,.5);
+    }
+    .llmBadge--unknown{
+      background: rgba(255,255,255,.08);
+      color:var(--fs-muted);
+      border-color: rgba(255,255,255,.15);
+    }
+
+    .llmScore{
+      font-weight:600;
+    }
+
+    .scoreBadge{
+      position:absolute;
+      top:10px;
+      right:10px;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.3px;
+      background: rgba(8,18,40,.8);
+      border:1px solid rgba(255,255,255,.2);
+      color:var(--fs-text);
+      backdrop-filter: blur(4px);
+    }
+
+    .scoreBadge span{
+      color:var(--fs-accent);
+      font-weight:800;
+      margin-left:6px;
+    }
+
+    .card-media{
+      position:relative;
+      background-size:cover;
+      background-position:center;
     }
 
     /* Responsive: stack sidebar above table */
@@ -388,8 +447,8 @@
   <div class="top-section">
     <div class="page-head">
       <div>
-        <div class="page-title">Raw Articles</div>
-        <div class="page-sub">Filter, triage, and scan incoming sources in one place.</div>
+        <div class="page-title">All Articles</div>
+        <div class="page-sub">Unified view with LLM scoring + recommendations.</div>
       </div>
       <div class="head-actions">
         <span class="stat-pill">Live feed</span>
@@ -456,11 +515,19 @@
             <option value="themeAsc">Theme (A→Z)</option>
             <option value="poiAsc">POI (A→Z)</option>
             <option value="titleAsc">Title (A→Z)</option>
+            <option value="llmScoreDesc">LLM score (high → low)</option>
           </select>
           <input id="raw-dateFrom" type="date" title="Date from"/>
           <input id="raw-dateTo" type="date" title="Date to"/>
         </div>
-        <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in table to quick-filter</div>
+        <div class="row" style="margin-top:6px;">
+          <label class="chk" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="raw-llmRecOnly"/>
+            LLM recommended only
+          </label>
+          <span class="pill">Uses latest LLM rank cache</span>
+        </div>
+        <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in cards to quick-filter</div>
       </div>
 
       <div class="box">
@@ -584,6 +651,11 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+  function raw_buildThumb(link){
+    const clean = String(link || "").trim();
+    if (!clean) return "";
+    return "https://image.thum.io/get/width/600/crop/600/" + clean;
   }
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
@@ -748,7 +820,30 @@
         }
 
         rawState.boot = res;
-        rawState.allRows = res.rows || [];
+        const incomingRows = Array.isArray(res.rows) ? res.rows : [];
+        rawState.allRows = incomingRows.map(r => {
+          const row = (r && typeof r === "object") ? r : {};
+          const title = String(row.title || "");
+          const link = String(row.link || "");
+          const source = String(row.source || "");
+          const theme = String(row.theme || "");
+          const poi = String(row.poi || "");
+          const keywords = String(row.keywords || "");
+          const llmRecommendation = String(row.llmRecommendation || "");
+          return Object.assign({
+            title,
+            link,
+            source,
+            theme,
+            poi,
+            keywords,
+            keywordsList: Array.isArray(row.keywordsList) ? row.keywordsList : [],
+            llmScore: Number.isFinite(Number(row.llmScore)) ? Number(row.llmScore) : null,
+            llmRecommendation,
+            llmRecommended: !!row.llmRecommended,
+            searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + keywords + " " + llmRecommendation).toLowerCase()
+          }, row);
+        });
         rawState.page = 1;
 
         raw_fillDatalist("raw-themeList",  res.facets?.themes || []);
@@ -785,40 +880,48 @@
     const kwInc  = rawState.selKwInc;
     const kwExc  = rawState.selKwExc;
     const kwMode = (R("raw-kwMode").value || "any");
+    const llmRecOnly = !!R("raw-llmRecOnly").checked;
 
-    let filtered = rawState.allRows.filter(r => {
-      if (themes.size && !themes.has(r.theme)) return false;
-      if (pois.size && !pois.has(r.poi)) return false;
-      if (sources.size && !sources.has(r.source)) return false;
+    let filtered = [];
+    try {
+      filtered = rawState.allRows.filter(r => {
+        if (themes.size && !themes.has(r.theme)) return false;
+        if (pois.size && !pois.has(r.poi)) return false;
+        if (sources.size && !sources.has(r.source)) return false;
 
-      if (fromMs && r.dateMs && r.dateMs < fromMs) return false;
-      if (toMs && r.dateMs && r.dateMs > toMs) return false;
+        if (fromMs && r.dateMs && r.dateMs < fromMs) return false;
+        if (toMs && r.dateMs && r.dateMs > toMs) return false;
 
-      const klist = (r.keywordsList || []);
+        const klist = (r.keywordsList || []);
 
-      if (kwInc.size) {
-        if (kwMode === "all") {
-          let okAll = true;
-          kwInc.forEach(k => { if (!klist.includes(k)) okAll = false; });
-          if (!okAll) return false;
-        } else {
-          let okAny = false;
-          kwInc.forEach(k => { if (klist.includes(k)) okAny = true; });
-          if (!okAny) return false;
+        if (kwInc.size) {
+          if (kwMode === "all") {
+            let okAll = true;
+            kwInc.forEach(k => { if (!klist.includes(k)) okAll = false; });
+            if (!okAll) return false;
+          } else {
+            let okAny = false;
+            kwInc.forEach(k => { if (klist.includes(k)) okAny = true; });
+            if (!okAny) return false;
+          }
         }
-      }
 
-      if (kwExc.size) {
-        let bad = false;
-        kwExc.forEach(k => { if (klist.includes(k)) bad = true; });
-        if (bad) return false;
-      }
+        if (kwExc.size) {
+          let bad = false;
+          kwExc.forEach(k => { if (klist.includes(k)) bad = true; });
+          if (bad) return false;
+        }
 
-      if (q) {
-        if (!r.searchText || !r.searchText.includes(q)) return false;
-      }
-      return true;
-    });
+        if (q) {
+          if (!r.searchText || !r.searchText.includes(q)) return false;
+        }
+        if (llmRecOnly && !r.llmRecommended) return false;
+        return true;
+      });
+    } catch (err) {
+      raw_notice("err", "❌ Filter error:\n" + (err?.message || String(err)));
+      filtered = [];
+    }
 
     // sort
     const sv = (R("raw-sort").value || "dateDesc");
@@ -829,6 +932,7 @@
     if (sv === "themeAsc") filtered.sort((a,b)=> cmpStr(a.theme,b.theme));
     if (sv === "poiAsc")   filtered.sort((a,b)=> cmpStr(a.poi,b.poi));
     if (sv === "titleAsc") filtered.sort((a,b)=> cmpStr(a.title,b.title));
+    if (sv === "llmScoreDesc") filtered.sort((a,b)=> (Number(b.llmScore || -1) - Number(a.llmScore || -1)));
     rawState.filtered = filtered;
 
     raw_updateSummary();
@@ -842,6 +946,7 @@
     if (rawState.selSource.size) parts.push(`Source: ${rawState.selSource.size}`);
     if (rawState.selKwInc.size)  parts.push(`Include: ${rawState.selKwInc.size} (${(R("raw-kwMode").value||"any").toUpperCase()})`);
     if (rawState.selKwExc.size)  parts.push(`Exclude: ${rawState.selKwExc.size}`);
+    if (R("raw-llmRecOnly").checked) parts.push("LLM recommended");
     if ((R("raw-dateFrom").value||"") || (R("raw-dateTo").value||"")) parts.push("Date range");
     if ((R("raw-q").value||"").trim()) parts.push("Search");
     R("raw-summary").querySelector("span").innerHTML =
@@ -873,7 +978,7 @@
     const empty = R("raw-empty");
     empty.style.display = total ? "none" : "block";
 
-    R("raw-cards").innerHTML = slice.map(r => {
+    const cards = slice.map(r => {
       const title = raw_escape(r.title || "");
       const link = (r.link || "").trim();
       const dateLabel = raw_escape(r.dateDisplay || "No date");
@@ -884,11 +989,6 @@
       const srcRaw = String(r.source || "");
       const thmRaw = String(r.theme || "");
       const poiRaw = String(r.poi || "");
-      const descParts = [];
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
       const kws = (r.keywordsList || []).slice(0, 8)
         .map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
@@ -897,10 +997,27 @@
         ? `<span class="tag clickable" data-kind="${kind}" data-v="${raw_attr(value)}">${raw_escape(value)}</span>`
         : "";
 
+      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
+      const recRaw = String(r.llmRecommendation || "").trim();
+      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
+      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
+      const recLabel = recRaw || "Unknown";
+      const thumb = raw_buildThumb(link);
+      const mediaStyle = thumb
+        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
+        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
+
+      const descParts = [];
+      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
+      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
+      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
+      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
+
       return `
         <article class="card">
-          <div class="card-media">
+          <div class="card-media" ${mediaStyle}>
             <span class="card-date">${dateLabel}</span>
+            <div class="scoreBadge">LLM<span>${llmScore}</span></div>
           </div>
           <div class="card-body">
             <div class="card-title">${titleHtml}</div>
@@ -909,6 +1026,7 @@
               ${tag("source", srcRaw)}
               ${tag("theme", thmRaw)}
               ${tag("poi", poiRaw)}
+              <span class="llmBadge llmBadge--${recClass}">${raw_escape(recLabel)}</span>
             </div>
           </div>
           <div class="card-footer">
@@ -917,6 +1035,8 @@
         </article>
       `;
     }).join("");
+
+    R("raw-cards").innerHTML = cards;
 
     // refine row height for Fit screen mode (after we have rows)
     const firstCard = R("raw-cards").querySelector(".card");
@@ -931,6 +1051,7 @@
     R("raw-dateTo").value = "";
     R("raw-sort").value = "dateDesc";
     R("raw-kwMode").value = "any";
+    R("raw-llmRecOnly").checked = false;
 
     rawState.selTheme.clear();
     rawState.selPoi.clear();
@@ -985,6 +1106,7 @@
   ["raw-pageSize","raw-sort","raw-dateFrom","raw-dateTo","raw-kwMode"].forEach(id => {
     R(id).addEventListener("change", () => raw_apply(true));
   });
+  R("raw-llmRecOnly").addEventListener("change", () => raw_apply(true));
 
   // Fit screen: refresh on resize (debounced)
   window.addEventListener("resize", () => {
