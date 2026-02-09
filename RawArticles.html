@@ -822,7 +822,30 @@
         }
 
         rawState.boot = res;
-        rawState.allRows = res.rows || [];
+        const incomingRows = Array.isArray(res.rows) ? res.rows : [];
+        rawState.allRows = incomingRows.map(r => {
+          const row = (r && typeof r === "object") ? r : {};
+          const title = String(row.title || "");
+          const link = String(row.link || "");
+          const source = String(row.source || "");
+          const theme = String(row.theme || "");
+          const poi = String(row.poi || "");
+          const keywords = String(row.keywords || "");
+          const llmRecommendation = String(row.llmRecommendation || "");
+          return Object.assign({
+            title,
+            link,
+            source,
+            theme,
+            poi,
+            keywords,
+            keywordsList: Array.isArray(row.keywordsList) ? row.keywordsList : [],
+            llmScore: Number.isFinite(Number(row.llmScore)) ? Number(row.llmScore) : null,
+            llmRecommendation,
+            llmRecommended: !!row.llmRecommended,
+            searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + keywords + " " + llmRecommendation).toLowerCase()
+          }, row);
+        });
         rawState.page = 1;
 
         raw_fillDatalist("raw-themeList",  res.facets?.themes || []);
@@ -861,40 +884,46 @@
     const kwMode = (R("raw-kwMode").value || "any");
     const llmRecOnly = !!R("raw-llmRecOnly").checked;
 
-    let filtered = rawState.allRows.filter(r => {
-      if (themes.size && !themes.has(r.theme)) return false;
-      if (pois.size && !pois.has(r.poi)) return false;
-      if (sources.size && !sources.has(r.source)) return false;
+    let filtered = [];
+    try {
+      filtered = rawState.allRows.filter(r => {
+        if (themes.size && !themes.has(r.theme)) return false;
+        if (pois.size && !pois.has(r.poi)) return false;
+        if (sources.size && !sources.has(r.source)) return false;
 
-      if (fromMs && r.dateMs && r.dateMs < fromMs) return false;
-      if (toMs && r.dateMs && r.dateMs > toMs) return false;
+        if (fromMs && r.dateMs && r.dateMs < fromMs) return false;
+        if (toMs && r.dateMs && r.dateMs > toMs) return false;
 
-      const klist = (r.keywordsList || []);
+        const klist = (r.keywordsList || []);
 
-      if (kwInc.size) {
-        if (kwMode === "all") {
-          let okAll = true;
-          kwInc.forEach(k => { if (!klist.includes(k)) okAll = false; });
-          if (!okAll) return false;
-        } else {
-          let okAny = false;
-          kwInc.forEach(k => { if (klist.includes(k)) okAny = true; });
-          if (!okAny) return false;
+        if (kwInc.size) {
+          if (kwMode === "all") {
+            let okAll = true;
+            kwInc.forEach(k => { if (!klist.includes(k)) okAll = false; });
+            if (!okAll) return false;
+          } else {
+            let okAny = false;
+            kwInc.forEach(k => { if (klist.includes(k)) okAny = true; });
+            if (!okAny) return false;
+          }
         }
-      }
 
-      if (kwExc.size) {
-        let bad = false;
-        kwExc.forEach(k => { if (klist.includes(k)) bad = true; });
-        if (bad) return false;
-      }
+        if (kwExc.size) {
+          let bad = false;
+          kwExc.forEach(k => { if (klist.includes(k)) bad = true; });
+          if (bad) return false;
+        }
 
-      if (q) {
-        if (!r.searchText || !r.searchText.includes(q)) return false;
-      }
-      if (llmRecOnly && !r.llmRecommended) return false;
-      return true;
-    });
+        if (q) {
+          if (!r.searchText || !r.searchText.includes(q)) return false;
+        }
+        if (llmRecOnly && !r.llmRecommended) return false;
+        return true;
+      });
+    } catch (err) {
+      raw_notice("err", "❌ Filter error:\n" + (err?.message || String(err)));
+      filtered = [];
+    }
 
     // sort
     const sv = (R("raw-sort").value || "dateDesc");
@@ -975,6 +1004,22 @@
       const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
       const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
       const recLabel = recRaw || "Unknown";
+
+      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
+      const recRaw = String(r.llmRecommendation || "").trim();
+      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
+      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
+      const recLabel = recRaw || "Unknown";
+      const thumb = raw_buildThumb(link);
+      const mediaStyle = thumb
+        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
+        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
+
+      const descParts = [];
+      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
+      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
+      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
+      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
       const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
       const recRaw = String(r.llmRecommendation || "").trim();
