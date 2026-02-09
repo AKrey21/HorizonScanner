@@ -374,57 +374,6 @@
       letter-spacing:.2px;
     }
 
-    .tableWrap{
-      border-radius:16px;
-      border:1px solid var(--fs-border);
-      background: rgba(9,26,56,.85);
-      box-shadow: var(--fs-shadow-soft);
-      overflow:auto;
-    }
-
-    table.rawTable{
-      width:100%;
-      border-collapse:separate;
-      border-spacing:0;
-      min-width:960px;
-      color:var(--fs-text);
-      font-size:12px;
-    }
-
-    table.rawTable th,
-    table.rawTable td{
-      padding:10px 12px;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      vertical-align:top;
-    }
-
-    table.rawTable th{
-      text-align:left;
-      font-weight:600;
-      font-size:11px;
-      letter-spacing:.4px;
-      text-transform:uppercase;
-      color:var(--fs-muted);
-      background: rgba(13,34,71,.98);
-      position:sticky;
-      top:0;
-      z-index:2;
-    }
-
-    table.rawTable tbody tr:hover{
-      background: rgba(255,255,255,.03);
-    }
-
-    .cell-title a{
-      color:var(--fs-text);
-      text-decoration:none;
-      font-weight:600;
-    }
-
-    .cell-title a:hover{
-      text-decoration:underline;
-    }
-
     .llmBadge{
       display:inline-flex;
       align-items:center;
@@ -460,6 +409,33 @@
 
     .llmScore{
       font-weight:600;
+    }
+
+    .scoreBadge{
+      position:absolute;
+      top:10px;
+      right:10px;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.3px;
+      background: rgba(8,18,40,.8);
+      border:1px solid rgba(255,255,255,.2);
+      color:var(--fs-text);
+      backdrop-filter: blur(4px);
+    }
+
+    .scoreBadge span{
+      color:var(--fs-accent);
+      font-weight:800;
+      margin-left:6px;
+    }
+
+    .card-media{
+      position:relative;
+      background-size:cover;
+      background-position:center;
     }
 
     /* Responsive: stack sidebar above table */
@@ -551,7 +527,7 @@
           </label>
           <span class="pill">Uses latest LLM rank cache</span>
         </div>
-        <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in table to quick-filter</div>
+        <div class="label" style="margin-top:8px;">Tip: click Theme/Source/POI in cards to quick-filter</div>
       </div>
 
       <div class="box">
@@ -677,6 +653,11 @@
       .replaceAll(">","&gt;")
       .replaceAll('"',"&quot;")
       .replaceAll("'","&#039;");
+  }
+  function raw_buildThumb(link){
+    const clean = String(link || "").trim();
+    if (!clean) return "";
+    return "https://image.thum.io/get/width/600/crop/600/" + clean;
   }
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
@@ -970,22 +951,7 @@
     const empty = R("raw-empty");
     empty.style.display = total ? "none" : "block";
 
-    const header = `
-      <thead>
-        <tr>
-          <th style="width:110px;">Date</th>
-          <th>Title</th>
-          <th style="width:140px;">Source</th>
-          <th style="width:140px;">Theme</th>
-          <th style="width:140px;">POI</th>
-          <th style="width:110px;">LLM Score</th>
-          <th style="width:140px;">LLM Rec</th>
-          <th style="width:220px;">Keywords</th>
-        </tr>
-      </thead>
-    `;
-
-    const body = slice.map(r => {
+    const cards = slice.map(r => {
       const title = raw_escape(r.title || "");
       const link = (r.link || "").trim();
       const dateLabel = raw_escape(r.dateDisplay || "No date");
@@ -1010,21 +976,46 @@
       const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
       const recLabel = recRaw || "Unknown";
 
+      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
+      const recRaw = String(r.llmRecommendation || "").trim();
+      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
+      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
+      const recLabel = recRaw || "Unknown";
+      const thumb = raw_buildThumb(link);
+      const mediaStyle = thumb
+        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
+        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
+
+      const descParts = [];
+      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
+      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
+      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
+      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
+
       return `
-        <tr>
-          <td>${dateLabel}</td>
-          <td class="cell-title">${titleHtml}</td>
-          <td>${tag("source", srcRaw)}</td>
-          <td>${tag("theme", thmRaw)}</td>
-          <td>${tag("poi", poiRaw)}</td>
-          <td class="llmScore">${llmScore}</td>
-          <td><span class="llmBadge llmBadge--${recClass}">${raw_escape(recLabel)}</span></td>
-          <td>${kws || "—"}</td>
-        </tr>
+        <article class="card">
+          <div class="card-media" ${mediaStyle}>
+            <span class="card-date">${dateLabel}</span>
+            <div class="scoreBadge">LLM<span>${llmScore}</span></div>
+          </div>
+          <div class="card-body">
+            <div class="card-title">${titleHtml}</div>
+            <div class="card-desc">${desc}</div>
+            <div class="card-tags">
+              ${tag("source", srcRaw)}
+              ${tag("theme", thmRaw)}
+              ${tag("poi", poiRaw)}
+              <span class="llmBadge llmBadge--${recClass}">${raw_escape(recLabel)}</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            ${kws}
+          </div>
+        </article>
       `;
     }).join("");
 
-    R("raw-table").innerHTML = header + `<tbody>${body}</tbody>`;
+    R("raw-cards").innerHTML = cards;
 
     // refine row height for Fit screen mode (after we have rows)
     const firstRow = R("raw-table").querySelector("tbody tr");
