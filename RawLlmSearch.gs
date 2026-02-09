@@ -241,6 +241,12 @@ const RAW_LLM_RANK_TIME_BUDGET_MS = 250000;
 const RAW_LLM_RANK_SHEET = "Raw LLM Rank Cache";
 const RAW_LLM_RANK_META_SHEET = "Raw LLM Rank Meta";
 
+function raw_isLlmRecommended_(llm) {
+  const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
+  if (!raw) return false;
+  return ["publish", "maybe", "recommend", "recommended", "feature", "include", "yes", "y"].some((v) => raw === v || raw.includes(v));
+}
+
 function ui_runWeeklyPicksLlmRank_v1(payload) {
   try {
     const prompt = String(payload?.prompt || "").trim();
@@ -305,7 +311,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     const prompt = String(payload?.prompt || "").trim();
     if (!prompt) return { ok: false, message: "Missing prompt." };
 
-    const topN = Math.max(1, Number(payload?.maxRows || 20));
+    const topN = 0;
     const fetchText = payload?.fetchText === true;
     const scoreFetchText = false;
 
@@ -358,6 +364,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           key: row.link || row.title,
           title: article.title,
           url: article.url,
+          theme: article.theme,
+          poi: article.poi,
           llm,
           row_index: i
         });
@@ -382,7 +390,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
         status: "in_progress",
         meta: {
           prompt,
-          requested_top_n: topN,
+          requested_top_n: topN || null,
+          recommended_total: scored.filter((item) => raw_isLlmRecommended_(item?.llm || {})).length,
           scored_total: scored.length,
           total_rows: rows.length,
           next_index: nextIndex,
@@ -396,10 +405,10 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       };
     }
 
-    const topCandidates = scored
-      .slice()
-      .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)))
-      .slice(0, topN);
+    const recommendedCandidates = scored
+      .filter((item) => raw_isLlmRecommended_(item?.llm || {}))
+      .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)));
+    const topCandidates = topN > 0 ? recommendedCandidates.slice(0, topN) : recommendedCandidates;
 
     topCandidates.forEach((candidate) => {
       try {
@@ -422,6 +431,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           key: candidate.key,
           title: article.title,
           url: article.url,
+          theme: article.theme,
+          poi: article.poi,
           llm
         });
       } catch (err) {
@@ -431,7 +442,8 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
     const meta = {
       prompt,
-      requested_top_n: topN,
+      requested_top_n: topN || null,
+      recommended_total: recommendedCandidates.length,
       scored_total: scored.length,
       scored_top_n: results.length,
       total_rows: rows.length,
@@ -551,7 +563,7 @@ function raw_writeLlmRankSheet_(payload) {
   const meta = payload?.meta || null;
 
   const cacheSheet = raw_getOrCreateSheet_(RAW_LLM_RANK_SHEET);
-  const headers = ["key", "title", "url", "llm_json"];
+  const headers = ["key", "title", "url", "theme", "poi", "llm_json"];
   cacheSheet.clearContents();
   cacheSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   if (results.length) {
@@ -559,6 +571,8 @@ function raw_writeLlmRankSheet_(payload) {
       item?.key || "",
       item?.title || "",
       item?.url || "",
+      item?.theme || "",
+      item?.poi || "",
       JSON.stringify(item?.llm || {})
     ]));
     cacheSheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
@@ -587,6 +601,8 @@ function raw_readLlmRankSheet_() {
     key: headers.indexOf("key"),
     title: headers.indexOf("title"),
     url: headers.indexOf("url"),
+    theme: headers.indexOf("theme"),
+    poi: headers.indexOf("poi"),
     llm: headers.indexOf("llm_json")
   };
 
@@ -608,6 +624,8 @@ function raw_readLlmRankSheet_() {
       key: String(key),
       title: idx.title >= 0 ? String(row[idx.title] || "") : "",
       url: idx.url >= 0 ? String(row[idx.url] || "") : "",
+      theme: idx.theme >= 0 ? String(row[idx.theme] || "") : "",
+      poi: idx.poi >= 0 ? String(row[idx.poi] || "") : "",
       llm
     });
   }
