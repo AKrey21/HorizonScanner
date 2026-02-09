@@ -125,13 +125,14 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
   .picksRoot .tableWrap { overflow: auto; border: 1px solid #333; border-radius: 10px; background: #0d0d0d; }
   .picksRoot .llmNote { padding: 8px 10px; font-size: 12px; color: #ddd; background: #151515; border-bottom: 1px solid #333; }
-  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; table-layout: fixed; }
+  .picksRoot table { border-collapse: collapse; width: 100%; color: #e8e8e8; }
   .picksRoot th, .picksRoot td {
     border-bottom: 1px solid #222;
     padding: 8px;
     font-size: 12px;
     vertical-align: top;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: anywhere;
   }
   .picksRoot td { background: #0f0f0f; color: #e8e8e8; }
   .picksRoot tr:nth-child(even) td { background: #121212; }
