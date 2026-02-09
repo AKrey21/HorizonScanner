@@ -75,8 +75,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
             Fetch article text
           </label>
           <div class="row" style="grid-template-columns: 120px 1fr; margin:0;">
-            <label>Top N</label>
-            <input id="llmMax" type="text" placeholder="10">
+            <label>Recommendations</label>
+            <div class="muted">Showing all LLM-recommended articles.</div>
           </div>
           <button class="btn" onclick="picks_fillDefaultPrompt()">Use default prompt</button>
           <button class="btn" onclick="picks_clearLlm()">Clear LLM</button>
@@ -153,6 +153,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     border-top: 2px solid #3a3a3a;
     border-bottom: 1px solid #262626;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    border-left: 4px solid #6b5b95;
   }
   .picksRoot .topicGroupMeta {
     font-weight: 400;
@@ -167,6 +168,12 @@ Highlight policy levers and workforce risks for 2025-2030.'
     height: 10px;
     background: #0b0b0b;
     border-bottom: 2px solid #1f1f1f;
+  }
+  .picksRoot .topicGroupItem td {
+    border-left: 3px solid #2a2a2a;
+  }
+  .picksRoot .topicGroupItem--first td {
+    border-top: 2px solid #1f1f1f;
   }
 
   /*  AI block */
@@ -261,11 +268,9 @@ Highlight policy levers and workforce risks for 2025-2030.'
     var btn = document.getElementById("btn_llmRun");
     var inp = document.getElementById("llmPrompt");
     var chk = document.getElementById("llmFetch");
-    var max = document.getElementById("llmMax");
     if (btn) btn.disabled = !!isBusy;
     if (inp) inp.disabled = !!isBusy;
     if (chk) chk.disabled = !!isBusy;
-    if (max) max.disabled = !!isBusy;
     if (btn) btn.textContent = isBusy ? "Ranking..." : "Run LLM rank";
   }
 
@@ -473,8 +478,9 @@ Highlight policy levers and workforce risks for 2025-2030.'
       html += "<tr class=\"topicGroupRow\"><td colspan=\"" + finalHeaders.length + "\">" +
         escapeHtml(group.label) +
         "<span class=\"topicGroupMeta\">(" + group.rows.length + ")</span></td></tr>";
-      group.rows.forEach(function (r) {
-        html += "<tr>";
+      group.rows.forEach(function (r, idx) {
+        var rowClass = "topicGroupItem" + (idx === 0 ? " topicGroupItem--first" : "");
+        html += "<tr class=\"" + rowClass + "\">";
         headers.forEach(function (h) {
           var v = r[h] == null ? "" : String(r[h]);
           if (isLikelyUrl(v)) {
@@ -605,9 +611,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
       return;
     }
 
-    var llmMaxEl = document.getElementById("llmMax");
     var llmFetchEl = document.getElementById("llmFetch");
-    var maxRows = Number((((llmMaxEl && llmMaxEl.value) || "").trim() || 20));
+    var maxRows = 0;
     var fetchText = !!(llmFetchEl && llmFetchEl.checked);
     picks_setLlmBusy(true);
     picks_setLlmStatus("Ranking raw articles...");
@@ -631,11 +636,13 @@ Highlight policy levers and workforce risks for 2025-2030.'
           var tokenEstimate = res && res.meta ? res.meta.tokens_estimate : null;
           var tokenNote = tokenEstimate ? " - est tokens: " + tokenEstimate : "";
           var totalScored = res && res.meta ? Number(res.meta.scored_total || 0) : 0;
+          var totalRecommended = res && res.meta ? Number(res.meta.recommended_total || 0) : 0;
           var totalRows = res && res.meta ? Number(res.meta.total_rows || 0) : 0;
           var totalLabel = totalRows || totalScored || 0;
 
           if (res.status === "in_progress") {
-            var msg = "LLM ranking in progress (" + totalScored + " of " + totalLabel + " scored)" +
+            var progressNote = totalRecommended ? ", " + totalRecommended + " recommended" : "";
+            var msg = "LLM ranking in progress (" + totalScored + " of " + totalLabel + " scored" + progressNote + ")" +
               tokenNote +
               (errCount ? " - " + errCount + " errors" : "") +
               errPreview;
@@ -653,7 +660,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
 
           var resultCount = res && res.results ? res.results.length : 0;
           var totalDone = totalLabel || resultCount;
-          var doneMsg = "LLM ranking complete (top " + resultCount + " of " + totalDone + " scored from raw articles)" +
+          var recommendedLabel = totalRecommended || resultCount;
+          var doneMsg = "LLM ranking complete (" + resultCount + " recommended, " + totalScored + " scored from raw articles)" +
             tokenNote +
             (errCount ? " - " + errCount + " errors" : "") +
             errPreview;
