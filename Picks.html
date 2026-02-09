@@ -431,11 +431,7 @@ Highlight policy levers and workforce risks for 2025-2030.'
     if (!wrap) return;
 
     var useLlm = Object.keys(PICKS_LLM_RESULTS || {}).length > 0;
-    var recommendedRows = useLlm
-      ? rows.filter(function (r) { return picks_getLlmRecInfo(PICKS_LLM_RESULTS[picks_buildLlmKey(r)] || {}).isRecommended; })
-      : rows;
-    var showAllDueToNoRec = useLlm && rows.length && !recommendedRows.length;
-    var displayRows = showAllDueToNoRec ? rows : (useLlm ? recommendedRows : rows);
+    var displayRows = rows;
 
     if (!displayRows.length) {
       var meta = PICKS_META || {};
@@ -462,8 +458,8 @@ Highlight policy levers and workforce risks for 2025-2030.'
       });
     }
 
-    var noteHtml = showAllDueToNoRec
-      ? "<div class=\"llmNote\">No LLM recommendations; showing all scored rows.</div>"
+    var noteHtml = useLlm
+      ? "<div class=\"llmNote\">LLM results loaded; showing all scored rows with recommendation badges.</div>"
       : "";
     var html = noteHtml + "<table><thead><tr>";
     finalHeaders.forEach(function (h) { html += "<th>" + escapeHtml(h) + "</th>"; });
