@@ -791,7 +791,8 @@ function ui_getRawArticles_bootstrap_v1() {
       keywords: findCol(["matching keywords", "keywords", "matching_keyword"])
     };
 
-    const llmEntries = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
+    const llmEntriesRaw = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
+    const llmEntries = Array.isArray(llmEntriesRaw) ? llmEntriesRaw : [];
     const llmByLink = new Map();
     const llmByTitle = new Map();
 
