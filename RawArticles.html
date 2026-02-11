@@ -438,6 +438,24 @@
       background-position:center;
     }
 
+    .card{
+      cursor:pointer;
+    }
+    .card-details{
+      display:none;
+      border-top:1px solid var(--fs-border);
+      background: rgba(8,18,38,.75);
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--fs-muted);
+      line-height:1.45;
+    }
+    .card.expanded .card-details{ display:block; }
+    .detail-title{ color:var(--fs-text); font-weight:600; margin-bottom:4px; }
+    .detail-block{ margin-top:8px; }
+    .reason-list{ margin:6px 0 0 18px; padding:0; }
+    .reason-list li{ margin:3px 0; }
+
     /* Responsive: stack sidebar above table */
     @media (max-width: 980px){
       .main{ grid-template-columns: 1fr; }
@@ -486,6 +504,7 @@
         <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
           Daily (12:00 + prune 30d)
         </button>
+        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run LLM score (new only)</button>
       </div>
       <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
     </div>
@@ -592,9 +611,7 @@
       <div class="meta" id="raw-meta">Loading…</div>
 
       <div class="wrap" id="raw-wrap">
-        <div class="tableWrap">
-          <table class="rawTable" id="raw-table"></table>
-        </div>
+        <div class="cards" id="raw-cards"></div>
         <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
       </div>
 
@@ -629,9 +646,12 @@
     selSource: new Set(),
     selKwInc: new Set(),
     selKwExc: new Set(),
+    expandedIds: new Set(),
 
     rowH: 56 // used for Fit screen estimate; refined after render
   };
+
+  const RAW_LLM_DEFAULT_PROMPT = "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
 
   const R = (id) => document.getElementById(id);
 
@@ -662,7 +682,7 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn"].forEach(id => {
+    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
@@ -832,6 +852,8 @@
           const poi = String(row.poi || "");
           const keywords = String(row.keywords || "");
           const llmRecommendation = String(row.llmRecommendation || "");
+          const llmSummary = String(row.llmSummary || "");
+          const llmReasons = Array.isArray(row.llmReasons) ? row.llmReasons.map(x => String(x || "").trim()).filter(Boolean) : [];
           return Object.assign({
             title,
             link,
@@ -842,8 +864,10 @@
             keywordsList: Array.isArray(row.keywordsList) ? row.keywordsList : [],
             llmScore: Number.isFinite(Number(row.llmScore)) ? Number(row.llmScore) : null,
             llmRecommendation,
+            llmSummary,
+            llmReasons,
             llmRecommended: !!row.llmRecommended,
-            searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + keywords + " " + llmRecommendation).toLowerCase()
+            searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + keywords + " " + llmRecommendation + " " + llmSummary + " " + llmReasons.join(" ")).toLowerCase()
           }, row);
         });
         rawState.page = 1;
@@ -1004,12 +1028,6 @@
       const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
       const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
       const recLabel = recRaw || "Unknown";
-
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
       const thumb = raw_buildThumb(link);
       const mediaStyle = thumb
         ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
@@ -1021,40 +1039,15 @@
       if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
       const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
-      const thumb = raw_buildThumb(link);
-      const mediaStyle = thumb
-        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
-        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
-
-      const descParts = [];
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
-
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
-      const thumb = raw_buildThumb(link);
-      const mediaStyle = thumb
-        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
-        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
-
-      const descParts = [];
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
+      const articleId = Number(r.id || 0);
+      const isExpanded = rawState.expandedIds.has(articleId);
+      const reasonItems = (r.llmReasons || []).map(x => `<li>${raw_escape(x)}</li>`).join("");
+      const summaryText = String(r.llmSummary || "").trim();
+      const recommendationLabel = recClass === "publish" ? "Yes" : (recClass === "maybe" ? "Maybe" : "No");
+      const allKeywords = (r.keywordsList || []).map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
 
       return `
-        <article class="card">
+        <article class="card ${isExpanded ? "expanded" : ""}" data-id="${articleId}">
           <div class="card-media" ${mediaStyle}>
             <span class="card-date">${dateLabel}</span>
             <div class="scoreBadge">LLM<span>${llmScore}</span></div>
@@ -1072,15 +1065,20 @@
           <div class="card-footer">
             ${kws}
           </div>
+          <div class="card-details">
+            <div class="detail-title">Recommendation: ${recommendationLabel} (${raw_escape(recLabel)})</div>
+            <div><b>Why:</b> ${(reasonItems ? `<ul class="reason-list">${reasonItems}</ul>` : "No LLM reasons recorded yet.")}</div>
+            <div class="detail-block"><b>Summary:</b> ${summaryText ? raw_escape(summaryText) : "No summary available yet."}</div>
+            <div class="detail-block"><b>All keyword tags:</b> ${allKeywords || "—"}</div>
+          </div>
         </article>
       `;
     }).join("");
 
     R("raw-cards").innerHTML = cards;
 
-    // refine row height for Fit screen mode (after we have rows)
-    const firstRow = R("raw-table").querySelector("tbody tr");
-    if (firstRow && firstRow.offsetHeight) rawState.rowH = firstRow.offsetHeight;
+    const firstCard = R("raw-cards")?.querySelector(".card");
+    if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
 
     raw_noticeClear();
   }
@@ -1120,20 +1118,37 @@
     raw_apply(true);
   }
 
-  // quick-filter by clicking cells
-  R("raw-table").addEventListener("click", (e) => {
+  // quick-filter tags + card expand on click
+  R("raw-cards").addEventListener("click", (e) => {
     const t = e.target;
-    if (!t || !t.dataset) return;
-    const kind = t.dataset.kind;
-    const v = raw_unattr(t.dataset.v || "");
-    if (!v) return;
+    if (!t) return;
 
-    if (kind === "theme") raw_addToSet(rawState.selTheme, v);
-    if (kind === "poi") raw_addToSet(rawState.selPoi, v);
-    if (kind === "source") raw_addToSet(rawState.selSource, v);
+    if (t.closest("a")) return;
 
-    raw_renderAllChips();
-    raw_apply(true);
+    const chip = t.closest(".clickable");
+    if (chip && chip.dataset) {
+      const kind = chip.dataset.kind;
+      const v = raw_unattr(chip.dataset.v || "");
+      if (!v) return;
+
+      if (kind === "theme") raw_addToSet(rawState.selTheme, v);
+      if (kind === "poi") raw_addToSet(rawState.selPoi, v);
+      if (kind === "source") raw_addToSet(rawState.selSource, v);
+
+      raw_renderAllChips();
+      raw_apply(true);
+      return;
+    }
+
+    const card = t.closest(".card");
+    if (!card) return;
+    const id = Number(card.getAttribute("data-id") || 0);
+    if (!id) return;
+
+    if (rawState.expandedIds.has(id)) rawState.expandedIds.delete(id);
+    else rawState.expandedIds.add(id);
+
+    raw_renderPage();
   });
 
   // Search debounce (fast)
@@ -1238,6 +1253,51 @@
         R("raw-lastRefresh").textContent = "Failed";
       },
       { warnAfterMs: 35000, hardTimeoutMs: 6 * 60 * 1000 }
+    );
+  }
+
+  function raw_runLlmScore(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…");
+    R("raw-lastRefresh").textContent = "LLM scoring…";
+    raw_pollLlmScore();
+  }
+
+  function raw_pollLlmScore(){
+    raw_runRpc(
+      "LLM scoring",
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false }),
+      (res) => {
+        if (!res || res.ok !== true) {
+          raw_setBusyUI(false);
+          raw_notice("err", "❌ LLM scoring failed:\n" + (res?.message || JSON.stringify(res, null, 2)));
+          R("raw-lastRefresh").textContent = "LLM failed";
+          return;
+        }
+
+        const scored = Number(res?.meta?.scored_total || 0);
+        const total = Number(res?.meta?.total_rows || scored);
+        const recommended = Number(res?.meta?.recommended_total || 0);
+
+        if (res.status === "in_progress") {
+          raw_notice("busy", `🧠 LLM scoring in progress…\nScored ${scored} / ${total}\nRecommended: ${recommended}`);
+          R("raw-lastRefresh").textContent = `LLM scoring… ${scored}/${total}`;
+          setTimeout(raw_pollLlmScore, 700);
+          return;
+        }
+
+        raw_setBusyUI(false);
+        raw_notice("ok", `✅ LLM scoring complete.\nScored total: ${scored}\nRecommended: ${recommended}`);
+        R("raw-lastRefresh").textContent = "LLM done @ " + new Date().toLocaleTimeString();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ LLM scoring RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "LLM failed";
+      },
+      { warnAfterMs: 25000, hardTimeoutMs: 6 * 60 * 1000 }
     );
   }
 </script>
