@@ -96,7 +96,22 @@ function ingest_dailyRawArticles_() {
   var pruneStats = repo_pruneRawArticlesByAge_(ING_CFG.INGEST_PRUNE_DAYS);
   var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
   ingestRes.prune = pruneStats;
-  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+
+  if (ingestRes && ingestRes.ok && ingestRes.stats && Number(ingestRes.stats.imported || 0) > 0) {
+    ingestRes.llm = ingest_runDailyLlmScoringForNewArticles_();
+    if (ingestRes.llm && ingestRes.llm.ok === false) {
+      if (!Array.isArray(ingestRes.errors)) ingestRes.errors = [];
+      ingestRes.errors.push("Daily LLM scoring warning: " + String(ingestRes.llm.message || "Unknown LLM scoring error"));
+    }
+  } else {
+    ingestRes.llm = {
+      ok: true,
+      status: "skipped",
+      message: "No new articles imported; LLM scoring skipped."
+    };
+  }
+
+  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-02-11";
   try {
     var props = PropertiesService.getScriptProperties();
     props.setProperty("RAW_INGEST_LAST_RUN", new Date().toISOString());
@@ -118,6 +133,60 @@ function ingest_dailyRawArticles_() {
     console.log("Failed to record RAW_INGEST_LAST_RUN:", e);
   }
   return ingestRes;
+}
+
+function ingest_runDailyLlmScoringForNewArticles_() {
+  if (typeof ui_runRawArticlesLlmRank_v2 !== "function") {
+    return { ok: false, message: "LLM scoring function ui_runRawArticlesLlmRank_v2 is unavailable." };
+  }
+
+  var prompt = (typeof RAW_LLM_SCORE_ONLY_GUIDE_TEXT !== "undefined" && RAW_LLM_SCORE_ONLY_GUIDE_TEXT)
+    ? RAW_LLM_SCORE_ONLY_GUIDE_TEXT
+    : "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+
+  var startedAt = Date.now();
+  var maxLoopMs = 320000;
+  var maxPasses = 3;
+  var pass = 0;
+  var lastRes = null;
+
+  while (pass < maxPasses && (Date.now() - startedAt) < maxLoopMs) {
+    pass += 1;
+    lastRes = ui_runRawArticlesLlmRank_v2({
+      prompt: prompt,
+      maxRows: 0,
+      fetchText: false,
+      sectorBy: "theme"
+    });
+
+    if (!lastRes || lastRes.ok !== true) {
+      return {
+        ok: false,
+        pass: pass,
+        message: (lastRes && lastRes.message) ? lastRes.message : "LLM scoring returned no response.",
+        response: lastRes || null
+      };
+    }
+
+    if (lastRes.status !== "in_progress") {
+      return {
+        ok: true,
+        status: lastRes.status || "done",
+        pass: pass,
+        meta: lastRes.meta || null,
+        errors: Array.isArray(lastRes.errors) ? lastRes.errors : []
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    status: (lastRes && lastRes.status) ? lastRes.status : "in_progress",
+    pass: pass,
+    message: "LLM scoring still in progress; it will continue from saved progress on next run.",
+    meta: lastRes && lastRes.meta ? lastRes.meta : null,
+    errors: (lastRes && Array.isArray(lastRes.errors)) ? lastRes.errors : []
+  };
 }
 
 /**

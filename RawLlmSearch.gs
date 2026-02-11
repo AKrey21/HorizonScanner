@@ -385,7 +385,6 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     if (progressScored.length) progressScored.forEach((item) => pushScored(item));
 
     let promptChars = sameJob ? Number(progress?.promptChars || 0) : 0;
-    const newlyScoredRowIndexes = new Set();
 
     const sectors = new Map();
     pendingRows.forEach((entry) => {
@@ -443,7 +442,6 @@ function ui_runRawArticlesLlmRank_v2(payload) {
             llm,
             row_index: scoredRowIndex
           });
-          newlyScoredRowIndexes.add(scoredRowIndex);
         } catch (err) {
           errors.push(`[${currentSector}] ${String(err?.message || err)}`);
         }
@@ -508,66 +506,14 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       .filter((item) => raw_isLlmRecommended_(item?.llm || {}))
       .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)));
 
-    const cachedRecommended = recommendedCandidates
-      .filter((item) => !newlyScoredRowIndexes.has(Number(item?.row_index || -1)))
-      .map((item) => ({
-        key: item?.key || "",
-        title: item?.title || "",
-        url: item?.url || "",
-        theme: item?.theme || "",
-        poi: item?.poi || "",
-        llm: item?.llm || {}
-      }));
-
-    const results = cachedRecommended.slice();
-    const topCandidates = recommendedCandidates
-      .filter((item) => newlyScoredRowIndexes.has(Number(item?.row_index || -1)));
-
-    topCandidates.forEach((candidate) => {
-      try {
-        const article = raw_buildLlmArticle_(rows[candidate.row_index], fetchText);
-        const llmPrompt = raw_buildLlmPrompt_(prompt, article);
-        promptChars += llmPrompt.length;
-        const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
-        const parsed = feeds_safeParseJsonObject_(responseText);
-        if (!parsed) {
-          errors.push(`No JSON parsed for: ${article.url || article.title}`);
-          results.push({
-            key: candidate.key,
-            title: candidate.title,
-            url: candidate.url,
-            theme: candidate.theme,
-            poi: candidate.poi,
-            llm: candidate.llm || {}
-          });
-          return;
-        }
-
-        const finalScore = Number(parsed.final_score);
-        const llm = Object.assign({}, parsed, {
-          final_score: Number.isFinite(finalScore) ? finalScore : 0
-        });
-
-        results.push({
-          key: candidate.key,
-          title: article.title,
-          url: article.url,
-          theme: article.theme,
-          poi: article.poi,
-          llm
-        });
-      } catch (err) {
-        errors.push(String(err?.message || err));
-        results.push({
-          key: candidate.key,
-          title: candidate.title,
-          url: candidate.url,
-          theme: candidate.theme,
-          poi: candidate.poi,
-          llm: candidate.llm || {}
-        });
-      }
-    });
+    const results = recommendedCandidates.map((item) => ({
+      key: item?.key || "",
+      title: item?.title || "",
+      url: item?.url || "",
+      theme: item?.theme || "",
+      poi: item?.poi || "",
+      llm: item?.llm || {}
+    }));
 
     const meta = {
       prompt,
@@ -580,7 +526,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       total_rows: rows.length,
       pending_rows: pendingRows.length,
       score_fetch_text: scoreFetchText,
-      top_n_fetch_text: fetchText,
+      top_n_fetch_text: false,
       prompt_chars_total: promptChars,
       tokens_estimate: estimateTokensFromChars_(promptChars),
       source: "Raw Articles",
