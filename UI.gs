@@ -841,6 +841,10 @@ function ui_getRawArticles_bootstrap_v1() {
       const llmScore = Number.isFinite(llmScoreRaw) ? llmScoreRaw : null;
       const llmRecommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
       const llmRecommended = (typeof raw_isLlmRecommended_ === "function") ? raw_isLlmRecommended_(llm) : false;
+      const llmSummary = String(llm.summary || "").trim();
+      const llmReasons = Array.isArray(llm.score_reasons)
+        ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
+        : [];
 
       const kwList = splitKeywords(kwS);
 
@@ -863,7 +867,9 @@ function ui_getRawArticles_bootstrap_v1() {
         llmScore,
         llmRecommendation,
         llmRecommended,
-        searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + kwS + " " + llmRecommendation).toLowerCase()
+        llmSummary,
+        llmReasons,
+        searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + kwS + " " + llmRecommendation + " " + llmSummary + " " + llmReasons.join(" ")).toLowerCase()
       };
     });
 
