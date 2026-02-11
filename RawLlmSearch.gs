@@ -240,6 +240,7 @@ const RAW_LLM_RANK_PROGRESS_KEY = "RAW_LLM_RANK_PROGRESS_V1";
 const RAW_LLM_RANK_TIME_BUDGET_MS = 250000;
 const RAW_LLM_RANK_SHEET = "Raw LLM Rank Cache";
 const RAW_LLM_RANK_META_SHEET = "Raw LLM Rank Meta";
+const RAW_LLM_RANK_PROGRESS_SHEET = "Raw LLM Rank Progress";
 
 function raw_isLlmRecommended_(llm) {
   const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
@@ -591,11 +592,19 @@ function raw_saveLlmRankCache_(payload) {
     results: Array.isArray(safe.results) ? safe.results : [],
     meta: safe.meta || null
   });
-  PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_CACHE_KEY, serialized);
+  try {
+    PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_CACHE_KEY, serialized);
+  } catch (err) {
+    // Large ranking payloads can exceed Script Properties size limits.
+    // Sheet persistence is the source of truth and supports larger volumes.
+  }
   raw_writeLlmRankSheet_(safe);
 }
 
 function raw_getLlmRankProgress_() {
+  const sheetPayload = raw_readLlmRankProgressSheet_();
+  if (sheetPayload) return sheetPayload;
+
   const raw = PropertiesService.getScriptProperties().getProperty(RAW_LLM_RANK_PROGRESS_KEY);
   if (!raw) return null;
   try {
@@ -607,7 +616,7 @@ function raw_getLlmRankProgress_() {
 
 function raw_setLlmRankProgress_(payload) {
   const safe = payload || {};
-  const serialized = JSON.stringify({
+  const progressPayload = {
     prompt: safe.prompt || "",
     topN: Number(safe.topN || 0),
     fetchText: safe.fetchText === true,
@@ -615,11 +624,22 @@ function raw_setLlmRankProgress_(payload) {
     promptChars: Number(safe.promptChars || 0),
     scored: Array.isArray(safe.scored) ? safe.scored : [],
     errors: Array.isArray(safe.errors) ? safe.errors.slice(0, 50) : []
-  });
-  PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_PROGRESS_KEY, serialized);
+  };
+
+  raw_writeLlmRankProgressSheet_(progressPayload);
+
+  const serialized = JSON.stringify(Object.assign({}, progressPayload, {
+    scored: []
+  }));
+  try {
+    PropertiesService.getScriptProperties().setProperty(RAW_LLM_RANK_PROGRESS_KEY, serialized);
+  } catch (err) {
+    // Best-effort only. Sheet persistence is the source of truth.
+  }
 }
 
 function raw_clearLlmRankProgress_() {
+  raw_clearLlmRankProgressSheet_();
   PropertiesService.getScriptProperties().deleteProperty(RAW_LLM_RANK_PROGRESS_KEY);
 }
 
@@ -636,6 +656,114 @@ function raw_clearLlmRankSheets_() {
   if (cacheSheet) cacheSheet.clearContents();
   const metaSheet = ss.getSheetByName(RAW_LLM_RANK_META_SHEET);
   if (metaSheet) metaSheet.clearContents();
+  raw_clearLlmRankProgressSheet_();
+}
+
+function raw_clearLlmRankProgressSheet_() {
+  const ss = getSpreadsheet_();
+  const progressSheet = ss.getSheetByName(RAW_LLM_RANK_PROGRESS_SHEET);
+  if (progressSheet) progressSheet.clearContents();
+}
+
+function raw_writeLlmRankProgressSheet_(payload) {
+  const safe = payload || {};
+  const scored = Array.isArray(safe.scored) ? safe.scored : [];
+
+  const progressSheet = raw_getOrCreateSheet_(RAW_LLM_RANK_PROGRESS_SHEET);
+  progressSheet.clearContents();
+
+  const headers = [
+    "prompt",
+    "topN",
+    "fetchText",
+    "nextIndex",
+    "promptChars",
+    "errors_json"
+  ];
+  progressSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  progressSheet.getRange(2, 1, 1, headers.length).setValues([[
+    String(safe.prompt || ""),
+    Number(safe.topN || 0),
+    safe.fetchText === true,
+    Number(safe.nextIndex || 0),
+    Number(safe.promptChars || 0),
+    JSON.stringify(Array.isArray(safe.errors) ? safe.errors.slice(0, 50) : [])
+  ]]);
+
+  const scoredHeaders = ["key", "title", "url", "theme", "poi", "row_index", "llm_json"];
+  progressSheet.getRange(4, 1, 1, scoredHeaders.length).setValues([scoredHeaders]);
+  if (scored.length) {
+    const scoredRows = scored.map((item) => ([
+      item?.key || "",
+      item?.title || "",
+      item?.url || "",
+      item?.theme || "",
+      item?.poi || "",
+      Number(item?.row_index || 0),
+      JSON.stringify(item?.llm || {})
+    ]));
+    progressSheet.getRange(5, 1, scoredRows.length, scoredHeaders.length).setValues(scoredRows);
+  }
+}
+
+function raw_readLlmRankProgressSheet_() {
+  const ss = getSpreadsheet_();
+  const progressSheet = ss.getSheetByName(RAW_LLM_RANK_PROGRESS_SHEET);
+  if (!progressSheet || progressSheet.getLastRow() < 2) return null;
+
+  const metaValues = progressSheet.getRange(2, 1, 1, 6).getValues()[0] || [];
+  const prompt = String(metaValues[0] || "");
+  if (!prompt) return null;
+
+  let errors = [];
+  const errorsRaw = String(metaValues[5] || "").trim();
+  if (errorsRaw) {
+    try {
+      const parsed = JSON.parse(errorsRaw);
+      errors = Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      errors = [];
+    }
+  }
+
+  const scored = [];
+  if (progressSheet.getLastRow() >= 5) {
+    const scoredRows = progressSheet.getRange(5, 1, progressSheet.getLastRow() - 4, 7).getValues();
+    scoredRows.forEach((row) => {
+      const key = String(row[0] || "").trim();
+      const llmRaw = String(row[6] || "").trim();
+      if (!key && !llmRaw) return;
+
+      let llm = {};
+      if (llmRaw) {
+        try {
+          llm = JSON.parse(llmRaw);
+        } catch (err) {
+          llm = {};
+        }
+      }
+
+      scored.push({
+        key,
+        title: String(row[1] || ""),
+        url: String(row[2] || ""),
+        theme: String(row[3] || ""),
+        poi: String(row[4] || ""),
+        row_index: Number(row[5] || 0),
+        llm
+      });
+    });
+  }
+
+  return {
+    prompt,
+    topN: Number(metaValues[1] || 0),
+    fetchText: metaValues[2] === true || String(metaValues[2]).toLowerCase() === "true",
+    nextIndex: Number(metaValues[3] || 0),
+    promptChars: Number(metaValues[4] || 0),
+    scored,
+    errors
+  };
 }
 
 function raw_writeLlmRankSheet_(payload) {
