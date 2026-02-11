@@ -1266,7 +1266,7 @@
   function raw_pollLlmScore(){
     raw_runRpc(
       "LLM scoring",
-      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false }),
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false, sectorBy: "theme" }),
       (res) => {
         if (!res || res.ok !== true) {
           raw_setBusyUI(false);
@@ -1278,9 +1278,16 @@
         const scored = Number(res?.meta?.scored_total || 0);
         const total = Number(res?.meta?.total_rows || scored);
         const recommended = Number(res?.meta?.recommended_total || 0);
+        const sectorBy = String(res?.meta?.sector_by || "theme");
+        const sectorCurrent = String(res?.meta?.sector_current || "");
+        const sectorCursor = Number(res?.meta?.sector_cursor || 0);
+        const sectorTotal = Number(res?.meta?.sector_total || 0);
 
         if (res.status === "in_progress") {
-          raw_notice("busy", `🧠 LLM scoring in progress…\nScored ${scored} / ${total}\nRecommended: ${recommended}`);
+          const sectorLine = sectorCurrent
+            ? `\nSector (${sectorBy}): ${sectorCurrent} (${Math.min(sectorCursor + 1, sectorTotal)}/${sectorTotal || "?"})`
+            : "";
+          raw_notice("busy", `🧠 LLM scoring in progress…\nScored ${scored} / ${total}${sectorLine}\nRecommended: ${recommended}`);
           R("raw-lastRefresh").textContent = `LLM scoring… ${scored}/${total}`;
           setTimeout(raw_pollLlmScore, 700);
           return;
