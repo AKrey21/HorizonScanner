@@ -321,6 +321,47 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     }
     const rows = Array.isArray(raw.rows) ? raw.rows : [];
 
+    const existingCachePayload = raw_readLlmRankSheet_();
+    const existingResults = Array.isArray(existingCachePayload?.results) ? existingCachePayload.results : [];
+    const scoredByLink = new Map();
+    const scoredByTitle = new Map();
+    existingResults.forEach((item) => {
+      const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
+      if (linkNorm) scoredByLink.set(linkNorm, item);
+      const titleKey = String(item?.title || "").trim().toLowerCase();
+      if (titleKey) scoredByTitle.set(titleKey, item);
+    });
+
+    const pendingRows = [];
+    const scored = [];
+    const scoredKeys = new Set();
+    const pushScored = (item) => {
+      const rowIndex = Number(item?.row_index);
+      const keyBase = Number.isFinite(rowIndex) ? `idx:${rowIndex}` : `key:${String(item?.key || "")}`;
+      if (scoredKeys.has(keyBase)) return;
+      scoredKeys.add(keyBase);
+      scored.push(item);
+    };
+
+    rows.forEach((row, idx) => {
+      const linkNorm = feeds_normalizeLink_(row?.link || row?.url);
+      const titleKey = String(row?.title || "").trim().toLowerCase();
+      const cached = (linkNorm && scoredByLink.get(linkNorm)) || (titleKey && scoredByTitle.get(titleKey)) || null;
+      if (cached) {
+        pushScored({
+          key: row.link || row.title,
+          title: String(cached?.title || row?.title || ""),
+          url: String(cached?.url || row?.link || ""),
+          theme: String(cached?.theme || row?.theme || ""),
+          poi: String(cached?.poi || row?.poi || ""),
+          llm: cached?.llm || {},
+          row_index: idx
+        });
+      } else {
+        pendingRows.push({ row, row_index: idx });
+      }
+    });
+
     const startedAt = Date.now();
     const results = [];
     const errors = [];
@@ -334,16 +375,21 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       raw_clearLlmRankProgress_();
     }
 
-    const scored = sameJob && Array.isArray(progress?.scored) ? progress.scored : [];
+    const progressScored = sameJob && Array.isArray(progress?.scored) ? progress.scored : [];
+    if (progressScored.length) {
+      progressScored.forEach((item) => pushScored(item));
+    }
+
     let promptChars = sameJob ? Number(progress?.promptChars || 0) : 0;
     let nextIndex = sameJob ? Number(progress?.nextIndex || 0) : 0;
 
-    for (let i = nextIndex; i < rows.length; i += 1) {
+    for (let i = nextIndex; i < pendingRows.length; i += 1) {
       if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
         nextIndex = i;
         break;
       }
-      const row = rows[i];
+      const entry = pendingRows[i] || {};
+      const row = entry.row || {};
       try {
         const article = raw_buildLlmArticle_(row, scoreFetchText);
         const llmPrompt = raw_buildLlmScorePrompt_(prompt, article);
@@ -360,14 +406,14 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           final_score: Number.isFinite(finalScore) ? finalScore : 0
         });
 
-        scored.push({
+        pushScored({
           key: row.link || row.title,
           title: article.title,
           url: article.url,
           theme: article.theme,
           poi: article.poi,
           llm,
-          row_index: i
+          row_index: Number(entry.row_index || 0)
         });
       } catch (err) {
         errors.push(String(err?.message || err));
@@ -375,7 +421,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       nextIndex = i + 1;
     }
 
-    if (nextIndex < rows.length) {
+    if (nextIndex < pendingRows.length) {
       raw_setLlmRankProgress_({
         prompt,
         topN,
@@ -394,6 +440,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           recommended_total: scored.filter((item) => raw_isLlmRecommended_(item?.llm || {})).length,
           scored_total: scored.length,
           total_rows: rows.length,
+          pending_rows: pendingRows.length,
           next_index: nextIndex,
           prompt_chars_total: promptChars,
           tokens_estimate: estimateTokensFromChars_(promptChars),
@@ -447,6 +494,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       scored_total: scored.length,
       scored_top_n: results.length,
       total_rows: rows.length,
+      pending_rows: pendingRows.length,
       score_fetch_text: scoreFetchText,
       top_n_fetch_text: fetchText,
       prompt_chars_total: promptChars,
