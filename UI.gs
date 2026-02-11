@@ -788,7 +788,11 @@ function ui_getRawArticles_bootstrap_v1() {
       source:   findCol(["source"]),
       theme:    findCol(["theme"]),
       poi:      findCol(["point of interest", "poi", "point_of_interest"]),
-      keywords: findCol(["matching keywords", "keywords", "matching_keyword"])
+      keywords: findCol(["matching keywords", "keywords", "matching_keyword"]),
+      llmScore: findCol(["llm score", "llm_score"]),
+      llmRecommendation: findCol(["llm recommendation", "llm_recommendation", "publish recommendation", "publish_recommendation"]),
+      llmSummary: findCol(["llm summary", "llm_summary"]),
+      llmReasons: findCol(["llm reasons", "llm_reasons", "score reasons", "score_reasons"])
     };
 
     const llmEntriesRaw = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
@@ -833,18 +837,38 @@ function ui_getRawArticles_bootstrap_v1() {
       const poi   = (idx.poi   >= 0) ? r[idx.poi]   : "";
       const kwS   = (idx.keywords>=0) ? r[idx.keywords] : "";
 
+      const llmScoreCell = (idx.llmScore >= 0) ? r[idx.llmScore] : "";
+      const llmRecommendationCell = (idx.llmRecommendation >= 0) ? r[idx.llmRecommendation] : "";
+      const llmSummaryCell = (idx.llmSummary >= 0) ? r[idx.llmSummary] : "";
+      const llmReasonsCell = (idx.llmReasons >= 0) ? r[idx.llmReasons] : "";
+      const llmScoreSheet = Number(llmScoreCell);
+      const llmScoreSheetSafe = Number.isFinite(llmScoreSheet) ? llmScoreSheet : null;
+      const llmRecommendationSheet = String(llmRecommendationCell || "").trim();
+      const llmSummarySheet = String(llmSummaryCell || "").trim();
+      const llmReasonsSheet = String(llmReasonsCell || "")
+        .split(/[|\n•;]/g)
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
+
       const linkNorm = feeds_normalizeLink_(link);
       let llm = linkNorm ? llmByLink.get(linkNorm) : null;
       if (!llm && title) llm = llmByTitle.get(String(title).trim().toLowerCase());
       llm = llm || {};
       const llmScoreRaw = Number(llm.final_score);
-      const llmScore = Number.isFinite(llmScoreRaw) ? llmScoreRaw : null;
-      const llmRecommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
-      const llmRecommended = (typeof raw_isLlmRecommended_ === "function") ? raw_isLlmRecommended_(llm) : false;
-      const llmSummary = String(llm.summary || "").trim();
-      const llmReasons = Array.isArray(llm.score_reasons)
+      const llmScoreCache = Number.isFinite(llmScoreRaw) ? llmScoreRaw : null;
+      const llmRecommendationCache = String(llm.publish_recommendation || llm.recommendation || "").trim();
+      const llmSummaryCache = String(llm.summary || "").trim();
+      const llmReasonsCache = Array.isArray(llm.score_reasons)
         ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
         : [];
+
+      const llmScore = (llmScoreSheetSafe != null) ? llmScoreSheetSafe : llmScoreCache;
+      const llmRecommendation = llmRecommendationSheet || llmRecommendationCache;
+      const llmSummary = llmSummarySheet || llmSummaryCache;
+      const llmReasons = llmReasonsSheet.length ? llmReasonsSheet : llmReasonsCache;
+      const llmRecommended = (typeof raw_isLlmRecommended_ === "function")
+        ? raw_isLlmRecommended_({ publish_recommendation: llmRecommendation, recommendation: llmRecommendation })
+        : false;
 
       const kwList = splitKeywords(kwS);
 
