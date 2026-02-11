@@ -326,6 +326,12 @@
       gap:6px;
     }
 
+    .card-llm-btn{
+      margin-left:auto;
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+
     a{ color:var(--fs-text); text-decoration:none; word-break:break-word; }
     a:hover{ text-decoration:underline; }
 
@@ -642,6 +648,7 @@
     selKwInc: new Set(),
     selKwExc: new Set(),
     expandedIds: new Set(),
+    loadingIds: new Set(),
 
     rowH: 56 // used for Fit screen estimate; refined after render
   };
@@ -1060,10 +1067,14 @@
 
       const articleId = Number(r.id || 0);
       const isExpanded = rawState.expandedIds.has(articleId);
+      const isLlmLoading = rawState.loadingIds.has(articleId);
       const reasonItems = (r.llmReasons || []).map(x => `<li>${raw_escape(x)}</li>`).join("");
       const summaryText = String(r.llmSummary || "").trim();
       const recommendationLabel = recClass === "publish" ? "Yes" : (recClass === "maybe" ? "Maybe" : "No");
       const allKeywords = (r.keywordsList || []).map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
+      const llmBtnLabel = isLlmLoading
+        ? "Loading..."
+        : (summaryText ? "Reload LLM thoughts" : "Load LLM thoughts");
 
       return `
         <article class="card ${isExpanded ? "expanded" : ""}" data-id="${articleId}">
@@ -1083,6 +1094,7 @@
           </div>
           <div class="card-footer">
             ${kws}
+            <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""}>${llmBtnLabel}</button>
           </div>
           <div class="card-details">
             <div class="detail-title">Recommendation: ${recommendationLabel} (${raw_escape(recLabel)})</div>
@@ -1100,6 +1112,70 @@
     if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
 
     raw_noticeClear();
+  }
+
+  function raw_refreshSearchText(row){
+    if (!row || typeof row !== "object") return;
+    const llmReasons = Array.isArray(row.llmReasons) ? row.llmReasons : [];
+    row.searchText = (
+      String(row.title || "") + " " +
+      String(row.link || "") + " " +
+      String(row.source || "") + " " +
+      String(row.theme || "") + " " +
+      String(row.poi || "") + " " +
+      String(row.keywords || "") + " " +
+      String(row.llmRecommendation || "") + " " +
+      String(row.llmSummary || "") + " " +
+      llmReasons.join(" ")
+    ).toLowerCase();
+  }
+
+  function raw_loadLlmThoughtsForCard(articleId){
+    const id = Number(articleId || 0);
+    if (!id || rawState.loadingIds.has(id)) return;
+
+    rawState.loadingIds.add(id);
+    raw_renderPage();
+    raw_notice("busy", "🧠 Loading LLM thoughts for this article...");
+    R("raw-lastRefresh").textContent = "Loading card LLM...";
+
+    raw_runRpc(
+      "Card LLM thoughts",
+      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: RAW_LLM_DEFAULT_PROMPT, fetchText: false }),
+      (res) => {
+        rawState.loadingIds.delete(id);
+
+        if (!res || res.ok !== true || !res.row) {
+          raw_notice("err", "❌ Could not load LLM thoughts for this article.\n" + (res?.message || JSON.stringify(res, null, 2)));
+          R("raw-lastRefresh").textContent = "Card LLM failed";
+          raw_renderPage();
+          return;
+        }
+
+        const row = res.row || {};
+        const target = rawState.allRows.find((r) => Number(r?.id || 0) === id);
+        if (target) {
+          target.llmScore = Number.isFinite(Number(row.llmScore)) ? Number(row.llmScore) : null;
+          target.llmRecommendation = String(row.llmRecommendation || "").trim();
+          target.llmSummary = String(row.llmSummary || "").trim();
+          target.llmReasons = Array.isArray(row.llmReasons) ? row.llmReasons.map(x => String(x || "").trim()).filter(Boolean) : [];
+          target.llmRecommended = !!row.llmRecommended;
+          raw_refreshSearchText(target);
+        }
+
+        raw_notice("ok", "✅ LLM thoughts loaded for this article.");
+        R("raw-lastRefresh").textContent = "Card LLM updated @ " + new Date().toLocaleTimeString();
+        raw_apply(false);
+      },
+      (err) => {
+        rawState.loadingIds.delete(id);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Card LLM RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "Card LLM failed";
+        raw_renderPage();
+      },
+      { warnAfterMs: 12000, hardTimeoutMs: 3 * 60 * 1000 }
+    );
   }
 
   function raw_clear(){
@@ -1143,6 +1219,13 @@
     if (!t) return;
 
     if (t.closest("a")) return;
+
+    const llmBtn = t.closest('[data-action="llm-refresh"]');
+    if (llmBtn && llmBtn.dataset) {
+      const id = Number(llmBtn.dataset.id || 0);
+      if (id) raw_loadLlmThoughtsForCard(id);
+      return;
+    }
 
     const chip = t.closest(".clickable");
     if (chip && chip.dataset) {
