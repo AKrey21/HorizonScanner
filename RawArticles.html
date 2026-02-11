@@ -592,9 +592,7 @@
       <div class="meta" id="raw-meta">Loading…</div>
 
       <div class="wrap" id="raw-wrap">
-        <div class="tableWrap">
-          <table class="rawTable" id="raw-table"></table>
-        </div>
+        <div class="cards" id="raw-cards"></div>
         <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
       </div>
 
@@ -1004,44 +1002,6 @@
       const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
       const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
       const recLabel = recRaw || "Unknown";
-
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
-      const thumb = raw_buildThumb(link);
-      const mediaStyle = thumb
-        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
-        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
-
-      const descParts = [];
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
-
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
-      const thumb = raw_buildThumb(link);
-      const mediaStyle = thumb
-        ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
-        : `style="background-image: linear-gradient(135deg, rgba(6,16,36,.9), rgba(6,16,36,.6))"`;
-
-      const descParts = [];
-      if (srcRaw) descParts.push(`Source: ${raw_escape(srcRaw)}`);
-      if (thmRaw) descParts.push(`Theme: ${raw_escape(thmRaw)}`);
-      if (poiRaw) descParts.push(`POI: ${raw_escape(poiRaw)}`);
-      const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
-
-      const llmScore = Number.isFinite(Number(r.llmScore)) ? Number(r.llmScore).toFixed(1) : "—";
-      const recRaw = String(r.llmRecommendation || "").trim();
-      const recNorm = recRaw ? recRaw.toLowerCase() : "unknown";
-      const recClass = recNorm === "publish" ? "publish" : (recNorm === "maybe" ? "maybe" : (recNorm === "skip" ? "skip" : "unknown"));
-      const recLabel = recRaw || "Unknown";
       const thumb = raw_buildThumb(link);
       const mediaStyle = thumb
         ? `style="background-image: linear-gradient(135deg, rgba(6,16,36,.85), rgba(6,16,36,.4)), url('${raw_escape(thumb)}')"`
@@ -1078,9 +1038,8 @@
 
     R("raw-cards").innerHTML = cards;
 
-    // refine row height for Fit screen mode (after we have rows)
-    const firstRow = R("raw-table").querySelector("tbody tr");
-    if (firstRow && firstRow.offsetHeight) rawState.rowH = firstRow.offsetHeight;
+    const firstCard = R("raw-cards")?.querySelector(".card");
+    if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
 
     raw_noticeClear();
   }
@@ -1121,7 +1080,7 @@
   }
 
   // quick-filter by clicking cells
-  R("raw-table").addEventListener("click", (e) => {
+  R("raw-cards").addEventListener("click", (e) => {
     const t = e.target;
     if (!t || !t.dataset) return;
     const kind = t.dataset.kind;
