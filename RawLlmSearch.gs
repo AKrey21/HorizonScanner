@@ -606,6 +606,75 @@ function ui_runRawArticlesLlmRank_v2(payload) {
   }
 }
 
+function ui_runRawArticleLlmThoughts_v1(payload) {
+  try {
+    const id = Number(payload?.id || 0);
+    if (!Number.isFinite(id) || id < 2) return { ok: false, message: "Invalid article id." };
+
+    const prompt = String(payload?.prompt || "").trim() ||
+      "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+    const fetchText = payload?.fetchText === true;
+
+    const raw = ui_getRawArticles_bootstrap_v1();
+    if (!raw || raw.ok !== true) {
+      return { ok: false, message: raw?.message || "Failed to load raw articles." };
+    }
+
+    const rows = Array.isArray(raw.rows) ? raw.rows : [];
+    const rowIndex = rows.findIndex((r) => Number(r?.id || 0) === id);
+    if (rowIndex < 0) return { ok: false, message: `Article not found for id ${id}.` };
+
+    const row = rows[rowIndex] || {};
+    const article = raw_buildLlmArticle_(row, fetchText);
+    const llmPrompt = raw_buildLlmPrompt_(prompt, article);
+    const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+    const parsed = feeds_safeParseJsonObject_(responseText);
+    if (!parsed) return { ok: false, message: "No JSON parsed from LLM response." };
+
+    const finalScore = Number(parsed.final_score);
+    const llm = Object.assign({}, parsed, {
+      final_score: Number.isFinite(finalScore) ? finalScore : 0
+    });
+
+    const scoredItem = {
+      key: row.link || row.title,
+      title: article.title,
+      url: article.url,
+      theme: article.theme,
+      poi: article.poi,
+      llm,
+      row_index: rowIndex
+    };
+
+    raw_writeScoredLlmToRawSheet_([scoredItem]);
+
+    const llmRecommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
+    const llmSummary = String(llm.summary || "").trim();
+    const llmReasons = Array.isArray(llm.score_reasons)
+      ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+
+    return {
+      ok: true,
+      row: {
+        id,
+        llmScore: Number(llm.final_score || 0),
+        llmRecommendation,
+        llmRecommended: raw_isLlmRecommended_(llm),
+        llmSummary,
+        llmReasons
+      },
+      meta: {
+        source: "Raw Articles",
+        updated_row_id: id,
+        savedAt: new Date().toISOString()
+      }
+    };
+  } catch (err) {
+    return { ok: false, message: err?.message || String(err) };
+  }
+}
+
 function raw_normalizeSectorBy_(value) {
   const key = String(value || "theme").trim().toLowerCase();
   if (["theme", "poi", "source"].includes(key)) return key;
