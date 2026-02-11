@@ -363,7 +363,6 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     });
 
     const startedAt = Date.now();
-    const results = [];
     const errors = [];
     const progress = raw_getLlmRankProgress_();
     const sameJob = progress &&
@@ -382,6 +381,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
     let promptChars = sameJob ? Number(progress?.promptChars || 0) : 0;
     let nextIndex = sameJob ? Number(progress?.nextIndex || 0) : 0;
+    const newlyScoredRowIndexes = new Set();
 
     for (let i = nextIndex; i < pendingRows.length; i += 1) {
       if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
@@ -406,6 +406,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           final_score: Number.isFinite(finalScore) ? finalScore : 0
         });
 
+        const scoredRowIndex = Number(entry.row_index || 0);
         pushScored({
           key: row.link || row.title,
           title: article.title,
@@ -413,8 +414,9 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           theme: article.theme,
           poi: article.poi,
           llm,
-          row_index: Number(entry.row_index || 0)
+          row_index: scoredRowIndex
         });
+        newlyScoredRowIndexes.add(scoredRowIndex);
       } catch (err) {
         errors.push(String(err?.message || err));
       }
@@ -455,7 +457,21 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     const recommendedCandidates = scored
       .filter((item) => raw_isLlmRecommended_(item?.llm || {}))
       .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)));
-    const topCandidates = topN > 0 ? recommendedCandidates.slice(0, topN) : recommendedCandidates;
+
+    const cachedRecommended = recommendedCandidates
+      .filter((item) => !newlyScoredRowIndexes.has(Number(item?.row_index || -1)))
+      .map((item) => ({
+        key: item?.key || "",
+        title: item?.title || "",
+        url: item?.url || "",
+        theme: item?.theme || "",
+        poi: item?.poi || "",
+        llm: item?.llm || {}
+      }));
+
+    const results = cachedRecommended.slice();
+    const topCandidates = recommendedCandidates
+      .filter((item) => newlyScoredRowIndexes.has(Number(item?.row_index || -1)));
 
     topCandidates.forEach((candidate) => {
       try {
@@ -466,6 +482,14 @@ function ui_runRawArticlesLlmRank_v2(payload) {
         const parsed = feeds_safeParseJsonObject_(responseText);
         if (!parsed) {
           errors.push(`No JSON parsed for: ${article.url || article.title}`);
+          results.push({
+            key: candidate.key,
+            title: candidate.title,
+            url: candidate.url,
+            theme: candidate.theme,
+            poi: candidate.poi,
+            llm: candidate.llm || {}
+          });
           return;
         }
 
@@ -484,6 +508,14 @@ function ui_runRawArticlesLlmRank_v2(payload) {
         });
       } catch (err) {
         errors.push(String(err?.message || err));
+        results.push({
+          key: candidate.key,
+          title: candidate.title,
+          url: candidate.url,
+          theme: candidate.theme,
+          poi: candidate.poi,
+          llm: candidate.llm || {}
+        });
       }
     });
 
