@@ -486,6 +486,7 @@
         <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
           Daily (12:00 + prune 30d)
         </button>
+        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run LLM score (new only)</button>
       </div>
       <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
     </div>
@@ -631,6 +632,8 @@
     rowH: 56 // used for Fit screen estimate; refined after render
   };
 
+  const RAW_LLM_DEFAULT_PROMPT = "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+
   const R = (id) => document.getElementById(id);
 
   function raw_notice(type, msg){
@@ -660,7 +663,7 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn"].forEach(id => {
+    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
@@ -1197,6 +1200,51 @@
         R("raw-lastRefresh").textContent = "Failed";
       },
       { warnAfterMs: 35000, hardTimeoutMs: 6 * 60 * 1000 }
+    );
+  }
+
+  function raw_runLlmScore(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…");
+    R("raw-lastRefresh").textContent = "LLM scoring…";
+    raw_pollLlmScore();
+  }
+
+  function raw_pollLlmScore(){
+    raw_runRpc(
+      "LLM scoring",
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false }),
+      (res) => {
+        if (!res || res.ok !== true) {
+          raw_setBusyUI(false);
+          raw_notice("err", "❌ LLM scoring failed:\n" + (res?.message || JSON.stringify(res, null, 2)));
+          R("raw-lastRefresh").textContent = "LLM failed";
+          return;
+        }
+
+        const scored = Number(res?.meta?.scored_total || 0);
+        const total = Number(res?.meta?.total_rows || scored);
+        const recommended = Number(res?.meta?.recommended_total || 0);
+
+        if (res.status === "in_progress") {
+          raw_notice("busy", `🧠 LLM scoring in progress…\nScored ${scored} / ${total}\nRecommended: ${recommended}`);
+          R("raw-lastRefresh").textContent = `LLM scoring… ${scored}/${total}`;
+          setTimeout(raw_pollLlmScore, 700);
+          return;
+        }
+
+        raw_setBusyUI(false);
+        raw_notice("ok", `✅ LLM scoring complete.\nScored total: ${scored}\nRecommended: ${recommended}`);
+        R("raw-lastRefresh").textContent = "LLM done @ " + new Date().toLocaleTimeString();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ LLM scoring RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "LLM failed";
+      },
+      { warnAfterMs: 25000, hardTimeoutMs: 6 * 60 * 1000 }
     );
   }
 </script>
