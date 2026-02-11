@@ -802,13 +802,37 @@
 
   function raw_computeFitPageSize(){
     const wrap = R("raw-wrap");
-    if (!wrap) return 25;
+    const cardsEl = R("raw-cards");
+    if (!wrap || !cardsEl) return 25;
 
     const h = wrap.clientHeight || 0;
     const usable = Math.max(120, h - 14);
 
-    const rowH = Math.max(32, Number(rawState.rowH || 44));
-    return Math.max(5, Math.floor(usable / rowH));
+    const styles = window.getComputedStyle(cardsEl);
+    const gap = Number.parseFloat(styles.rowGap || styles.gap || "12") || 12;
+
+    let columns = 1;
+    const templateCols = String(styles.gridTemplateColumns || "").trim();
+    if (templateCols && templateCols !== "none") {
+      columns = Math.max(1, templateCols.split(/\s+/).filter(Boolean).length);
+    }
+
+    if (columns === 1) {
+      const minCardWidth = 280;
+      const containerW = cardsEl.clientWidth || 0;
+      if (containerW > 0) {
+        columns = Math.max(1, Math.floor((containerW + gap) / (minCardWidth + gap)));
+      }
+    }
+
+    const firstCard = cardsEl.querySelector(".card");
+    const cardH = Math.max(
+      80,
+      Number(firstCard?.offsetHeight || rawState.rowH || 220)
+    );
+
+    const rowsFit = Math.max(1, Math.floor((usable + gap) / (cardH + gap)));
+    return Math.max(1, rowsFit * columns);
   }
 
   function raw_getSelectedPageSize(){
