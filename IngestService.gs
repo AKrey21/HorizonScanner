@@ -96,7 +96,22 @@ function ingest_dailyRawArticles_() {
   var pruneStats = repo_pruneRawArticlesByAge_(ING_CFG.INGEST_PRUNE_DAYS);
   var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
   ingestRes.prune = pruneStats;
-  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+
+  if (ingestRes && ingestRes.ok && ingestRes.stats && Number(ingestRes.stats.imported || 0) > 0) {
+    ingestRes.llm = ingest_scheduleDailyLlmScoring_();
+    if (ingestRes.llm && ingestRes.llm.ok === false) {
+      if (!Array.isArray(ingestRes.errors)) ingestRes.errors = [];
+      ingestRes.errors.push("Daily LLM scoring warning: " + String(ingestRes.llm.message || "Unknown LLM scoring error"));
+    }
+  } else {
+    ingestRes.llm = {
+      ok: true,
+      status: "skipped",
+      message: "No new articles imported; LLM scoring skipped."
+    };
+  }
+
+  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-02-18";
   try {
     var props = PropertiesService.getScriptProperties();
     props.setProperty("RAW_INGEST_LAST_RUN", new Date().toISOString());
@@ -118,6 +133,101 @@ function ingest_dailyRawArticles_() {
     console.log("Failed to record RAW_INGEST_LAST_RUN:", e);
   }
   return ingestRes;
+}
+
+function ingest_scheduleDailyLlmScoring_() {
+  var handlerName = "ingest_runDailyLlmScoringJob_";
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    var existing = triggers.some(function (t) {
+      return t.getHandlerFunction && t.getHandlerFunction() === handlerName;
+    });
+    if (existing) {
+      return {
+        ok: true,
+        status: "already_queued",
+        handler: handlerName,
+        message: "Daily LLM scoring is already queued."
+      };
+    }
+
+    ScriptApp.newTrigger(handlerName)
+      .timeBased()
+      .after(5000)
+      .create();
+
+    return {
+      ok: true,
+      status: "queued",
+      handler: handlerName,
+      message: "Daily LLM scoring queued to run in background."
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: "queue_error",
+      handler: handlerName,
+      message: String(err && err.message ? err.message : err)
+    };
+  }
+}
+
+function ingest_runDailyLlmScoringJob_() {
+  var handlerName = "ingest_runDailyLlmScoringJob_";
+  var res = ingest_runDailyLlmScoringForNewArticles_();
+
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction && t.getHandlerFunction() === handlerName) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  if (res && res.ok && res.status === "in_progress") {
+    try {
+      ScriptApp.newTrigger(handlerName)
+        .timeBased()
+        .after(15000)
+        .create();
+    } catch (e) {
+      if (!Array.isArray(res.errors)) res.errors = [];
+      res.errors.push("Failed to queue next LLM scoring pass: " + String(e && e.message ? e.message : e));
+    }
+  }
+
+  return res;
+}
+
+function ingest_runDailyLlmScoringForNewArticles_() {
+  if (typeof ui_runRawArticlesLlmRank_v2 !== "function") {
+    return { ok: false, message: "LLM scoring function ui_runRawArticlesLlmRank_v2 is unavailable." };
+  }
+
+  var prompt = (typeof RAW_LLM_SCORE_ONLY_GUIDE_TEXT !== "undefined" && RAW_LLM_SCORE_ONLY_GUIDE_TEXT)
+    ? RAW_LLM_SCORE_ONLY_GUIDE_TEXT
+    : "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+
+  var lastRes = ui_runRawArticlesLlmRank_v2({
+    prompt: prompt,
+    maxRows: 0,
+    fetchText: false,
+    sectorBy: "theme"
+  });
+
+  if (!lastRes || lastRes.ok !== true) {
+    return {
+      ok: false,
+      message: (lastRes && lastRes.message) ? lastRes.message : "LLM scoring returned no response.",
+      response: lastRes || null
+    };
+  }
+
+  return {
+    ok: true,
+    status: lastRes.status || "done",
+    meta: lastRes.meta || null,
+    errors: Array.isArray(lastRes.errors) ? lastRes.errors : []
+  };
 }
 
 /**
