@@ -524,6 +524,7 @@
         </button>
         <button class="btn" id="raw-import14Btn" onclick="raw_importRss('14')">Import last 14 days</button>
         <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run AI scoring (new only)</button>
+        <button class="btn" id="raw-rereadPublishBtn" onclick="raw_rereadPublishBatch()" title="Re-read + reload LLM only for publish-recommended articles in the current filtered results">Re-read + reload all (Publish)</button>
         <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh</button>
       </div>
       <details id="raw-advancedActions" style="margin-top:8px;">
@@ -549,7 +550,7 @@
         <button class="btn" onclick="raw_applyPromptPreset('sanity')">Preset: sanity-check JSON</button>
       </div>
     </div>
-    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)” and “Load LLM thoughts”.</div>
+    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)”, “Load LLM thoughts”, and bulk re-read actions.</div>
   </details>
 
 
@@ -748,7 +749,7 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import14Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn","raw-prune14Btn"].forEach(id => {
+    ["raw-import7Btn","raw-import14Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn","raw-rereadPublishBtn","raw-prune14Btn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
@@ -1201,6 +1202,90 @@
     ).toLowerCase();
   }
 
+  function raw_isPublishRecommendation_(value){
+    const rec = String(value || "").trim().toLowerCase();
+    if (!rec) return false;
+    return rec === "publish" || rec.includes("publish");
+  }
+
+  function raw_loadLlmThoughtsForCardPromise(articleId, opts){
+    return new Promise((resolve, reject) => {
+      opts = opts || {};
+      const fetchText = opts.fetchText === true;
+      const id = Number(articleId || 0);
+      if (!id) { resolve({ skipped: true }); return; }
+
+      raw_runRpc(
+        "Card LLM thoughts",
+        (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: raw_getActivePrompt(), fetchText }),
+        (res) => {
+          if (!res || res.ok !== true || !res.row) {
+            reject(new Error(res?.message || "Could not load LLM thoughts for this article."));
+            return;
+          }
+
+          const row = res.row || {};
+          const target = rawState.allRows.find((r) => Number(r?.id || 0) === id);
+          if (target) {
+            target.llmScore = Number.isFinite(Number(row.llmScore)) ? Number(row.llmScore) : null;
+            target.llmRecommendation = String(row.llmRecommendation || "").trim();
+            target.llmSummary = String(row.llmSummary || "").trim();
+            target.llmReasons = Array.isArray(row.llmReasons) ? row.llmReasons.map(x => String(x || "").trim()).filter(Boolean) : [];
+            target.llmRecommended = !!row.llmRecommended;
+            raw_refreshSearchText(target);
+          }
+          resolve({ ok: true, row: res.row || {} });
+        },
+        (err) => {
+          const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+          reject(new Error(msg));
+        },
+        { warnAfterMs: 12000, hardTimeoutMs: 3 * 60 * 1000 }
+      );
+    });
+  }
+
+  async function raw_rereadPublishBatch(){
+    const targets = (rawState.filtered || []).filter((r) => raw_isPublishRecommendation_(r?.llmRecommendation));
+    if (!targets.length) {
+      raw_notice("warn", "No publish-recommended articles in the current filtered results.");
+      return;
+    }
+
+    raw_setBusyUI(true);
+    let done = 0;
+    let failed = 0;
+
+    raw_notice("busy", `🧠 Re-reading + reloading ${targets.length} publish article(s)...`);
+    for (const row of targets) {
+      const id = Number(row?.id || 0);
+      if (!id) continue;
+
+      rawState.loadingIds.add(id);
+      raw_renderPage();
+      R("raw-lastRefresh").textContent = `Bulk re-read... ${done + 1}/${targets.length}`;
+
+      try {
+        await raw_loadLlmThoughtsForCardPromise(id, { fetchText: true });
+        done += 1;
+      } catch (err) {
+        failed += 1;
+      } finally {
+        rawState.loadingIds.delete(id);
+      }
+    }
+
+    raw_setBusyUI(false);
+    raw_apply(false);
+
+    if (failed > 0) {
+      raw_notice("warn", `⚠️ Bulk re-read finished with partial errors. Updated: ${done}/${targets.length}, failed: ${failed}.`);
+    } else {
+      raw_notice("ok", `✅ Bulk re-read complete. Updated ${done} publish article(s).`);
+    }
+    R("raw-lastRefresh").textContent = "Bulk re-read done @ " + new Date().toLocaleTimeString();
+  }
+
   function raw_loadLlmThoughtsForCard(articleId, opts){
     opts = opts || {};
     const fetchText = opts.fetchText === true;
@@ -1478,7 +1563,7 @@
 
   function raw_runLlmScore(){
     raw_setBusyUI(true);
-    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles (full re-read enabled)…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
     R("raw-lastRefresh").textContent = "LLM scoring…";
     raw_pollLlmScore();
   }
@@ -1486,7 +1571,7 @@
   function raw_pollLlmScore(){
     raw_runRpc(
       "LLM scoring",
-      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: false, sectorBy: "theme" }),
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: true, sectorBy: "theme" }),
       (res) => {
         if (!res || res.ok !== true) {
           raw_setBusyUI(false);
