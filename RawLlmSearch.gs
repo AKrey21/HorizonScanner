@@ -369,6 +369,10 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     });
 
     const startedAt = Date.now();
+    const rawBudgetMs = Number(payload?.timeBudgetMs || 0);
+    const effectiveTimeBudgetMs = Number.isFinite(rawBudgetMs) && rawBudgetMs > 0
+      ? Math.max(10000, Math.min(rawBudgetMs, RAW_LLM_RANK_TIME_BUDGET_MS))
+      : RAW_LLM_RANK_TIME_BUDGET_MS;
     const errors = [];
     const progress = raw_getLlmRankProgress_();
     const sameJob = progress &&
@@ -409,7 +413,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       }
 
       for (let i = nextIndex; i < sectorRows.length; i += 1) {
-        if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
+        if (Date.now() - startedAt > effectiveTimeBudgetMs) {
           nextIndex = i;
           break;
         }
@@ -448,7 +452,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
         nextIndex = i + 1;
       }
 
-      if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
+      if (Date.now() - startedAt > effectiveTimeBudgetMs) {
         break;
       }
 

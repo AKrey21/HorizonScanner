@@ -497,17 +497,23 @@
     <button class="btn" onclick="raw_clear()">Clear</button>
 
       <div class="rightControls">
-      <div class="label" style="margin-right:6px;">Ingest RSS:</div>
+      <div class="label" style="margin-right:6px;">Actions:</div>
       <div class="row tight" style="flex-wrap:wrap;">
-        <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Last 7 days</button>
-        <button class="btn" id="raw-import30Btn" onclick="raw_importRss('30')">Last 30 days</button>
-        <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">All time</button>
         <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
-          Daily (12:00 + prune 30d)
+          Daily (prune 14d)
         </button>
-        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run LLM score (new only)</button>
+        <button class="btn" id="raw-import14Btn" onclick="raw_importRss('14')">Import last 14 days</button>
+        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run AI scoring (new only)</button>
+        <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh</button>
       </div>
-      <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
+      <details id="raw-advancedActions" style="margin-top:8px;">
+        <summary class="label" style="cursor:pointer;">More actions</summary>
+        <div class="row tight" style="margin-top:8px; flex-wrap:wrap;">
+          <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Import last 7 days</button>
+          <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">Import all time</button>
+          <button class="btn" id="raw-prune14Btn" onclick="raw_pruneToTwoWeeksNow()">Prune & reset to 14 days</button>
+        </div>
+      </details>
     </div>
     </div>
   </div>
@@ -526,6 +532,7 @@
         <div class="boxHead">
           <div class="label">Sort + Date range (optional)</div>
           <button class="btn ghost mini" onclick="raw_quickToday()">Today</button>
+          <button class="btn ghost mini" onclick="raw_resetToTwoWeeksView()">Reset 14d</button>
         </div>
         <div class="row">
           <select id="raw-sort">
@@ -684,7 +691,7 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn"].forEach(id => {
+    ["raw-import7Btn","raw-import14Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn","raw-prune14Btn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
@@ -1213,6 +1220,45 @@
     raw_apply(true);
   }
 
+  function raw_resetToTwoWeeksView(){
+    raw_clear();
+    const d = new Date();
+    const from = new Date(d.getTime());
+    from.setDate(from.getDate() - 13);
+    const toIso = d.toISOString().slice(0,10);
+    const fromIso = from.toISOString().slice(0,10);
+    R("raw-dateFrom").value = fromIso;
+    R("raw-dateTo").value = toIso;
+    raw_apply(true);
+    raw_notice("ok", "✅ Filters reset to last 14 days.");
+  }
+
+  function raw_pruneToTwoWeeksNow(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "🧹 Pruning Raw Articles older than 14 days…");
+    raw_runRpc(
+      "Prune Raw Articles",
+      (gs) => gs.ui_pruneRawArticlesNow_v1({ days: 14 }),
+      (res) => {
+        raw_setBusyUI(false);
+        if (!res || res.ok !== true) {
+          raw_notice("err", "❌ Prune failed.\n" + JSON.stringify(res, null, 2));
+          return;
+        }
+        const prune = res.prune || {};
+        raw_notice("ok", `✅ Prune complete.\nRemoved: ${prune.removed || 0}\nKept: ${prune.kept || 0}\nWindow: ${prune.maxAgeDays || 14} days`);
+        raw_resetToTwoWeeksView();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Prune RPC error:\n" + msg);
+      },
+      { warnAfterMs: 15000, hardTimeoutMs: 180000 }
+    );
+  }
+
   // quick-filter tags + card expand on click
   R("raw-cards").addEventListener("click", (e) => {
     const t = e.target;
@@ -1303,6 +1349,7 @@
       "Ingesting RSS",
       (gs) => {
         if (range === "daily") gs.ui_importRSS_daily_v1();
+        else if (range === "14") gs.ui_importRSS_14days_v1();
         else if (range === "30") gs.ui_importRSS_30days_v2();
         else if (range === "all") gs.ui_importRSS_all_v2();
         else gs.ui_importRSS_7days_v2();
@@ -1332,7 +1379,7 @@
           `Feed errors: ${s.feedErrors || 0}`;
 
         if (res.prune) {
-          msg += `\nPruned (>30 days): ${res.prune.removed || 0}`;
+          msg += `\nPruned (>${res.prune.maxAgeDays || 14} days): ${res.prune.removed || 0}`;
         }
 
         if (Array.isArray(res.errors) && res.errors.length) {
