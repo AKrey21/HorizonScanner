@@ -576,11 +576,27 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
     if (rowIndex < 0) return { ok: false, message: `Article not found for id ${id}.` };
 
     const row = rows[rowIndex] || {};
-    const article = raw_buildLlmArticle_(row, fetchText);
-    const llmPrompt = raw_buildLlmPrompt_(prompt, article);
-    const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
-    const parsed = feeds_safeParseJsonObject_(responseText);
+    let effectiveFetchText = fetchText;
+    let article = raw_buildLlmArticle_(row, effectiveFetchText);
+    let llmPrompt = raw_buildLlmPrompt_(prompt, article);
+    let responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+    let parsed = feeds_safeParseJsonObject_(responseText);
     if (!parsed) return { ok: false, message: "No JSON parsed from LLM response." };
+
+    const parsedSummary = String(parsed.summary || "").trim();
+    const parsedReasons = Array.isArray(parsed.score_reasons)
+      ? parsed.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+
+    if (!effectiveFetchText && !parsedSummary && !parsedReasons.length) {
+      // fallback retry: fetch full article text and try once more for richer output
+      effectiveFetchText = true;
+      article = raw_buildLlmArticle_(row, effectiveFetchText);
+      llmPrompt = raw_buildLlmPrompt_(prompt, article);
+      responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+      const parsedRetry = feeds_safeParseJsonObject_(responseText);
+      if (parsedRetry) parsed = parsedRetry;
+    }
 
     const finalScore = Number(parsed.final_score);
     const llm = Object.assign({}, parsed, {
@@ -600,7 +616,8 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
     raw_writeScoredLlmToRawSheet_([scoredItem]);
 
     const llmRecommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
-    const llmSummary = String(llm.summary || "").trim();
+    const fallbackSummary = String(row.llmSummary || "").trim();
+    const llmSummary = String(llm.summary || "").trim() || fallbackSummary;
     const llmReasons = Array.isArray(llm.score_reasons)
       ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
       : [];
@@ -618,6 +635,7 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
       meta: {
         source: "Raw Articles",
         updated_row_id: id,
+        fetchText: effectiveFetchText,
         savedAt: new Date().toISOString()
       }
     };
@@ -665,30 +683,40 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
     const rowNo = idx + 2;
     const link = String((row[1] || "")).trim();
     const linkNorm = feeds_normalizeLink_(link);
-    if (linkNorm && !rowByLink.has(linkNorm)) rowByLink.set(linkNorm, rowNo);
+    if (linkNorm && !rowByLink.has(linkNorm)) rowByLink.set(linkNorm, { rowNo, row });
   });
 
   const updates = [];
   items.forEach((item) => {
     const llm = item?.llm || {};
     const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
-    const rowNo = (linkNorm && rowByLink.get(linkNorm));
+    const rowMeta = linkNorm ? rowByLink.get(linkNorm) : null;
+    const rowNo = rowMeta?.rowNo;
     if (!rowNo) return;
+
+    const existing = Array.isArray(rowMeta?.row) ? rowMeta.row : [];
+    const existingRecommendation = String(existing[llmCols.recommendation - 1] || "").trim();
+    const existingSummary = String(existing[llmCols.summary - 1] || "").trim();
+    const existingReasons = String(existing[llmCols.reasons - 1] || "").trim();
 
     const reasons = Array.isArray(llm.score_reasons)
       ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean).join(" | ")
       : "";
     const scoreNum = Number(llm.final_score);
     const score = Number.isFinite(scoreNum) ? scoreNum : "";
-    const recommendation = String(llm.publish_recommendation || llm.recommendation || "").trim();
-    const summary = String(llm.summary || "").trim();
+    const recommendationRaw = String(llm.publish_recommendation || llm.recommendation || "").trim();
+    const summaryRaw = String(llm.summary || "").trim();
+
+    const recommendation = recommendationRaw || existingRecommendation;
+    const summary = summaryRaw || existingSummary;
+    const reasonsSafe = reasons || existingReasons;
 
     updates.push({
       rowNo,
       score,
       recommendation,
       summary,
-      reasons
+      reasons: reasonsSafe
     });
   });
 
