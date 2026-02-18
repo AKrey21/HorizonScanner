@@ -1122,6 +1122,7 @@
       const llmBtnLabel = isLlmLoading
         ? "Loading..."
         : (summaryText ? "Reload LLM thoughts" : "Load LLM thoughts");
+      const llmRereadLabel = isLlmLoading ? "Working..." : "Re-read + reload";
 
       return `
         <article class="card ${isExpanded ? "expanded" : ""}" data-id="${articleId}">
@@ -1142,6 +1143,7 @@
           <div class="card-footer">
             ${kws}
             <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""}>${llmBtnLabel}</button>
+            <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again and rescore with LLM">${llmRereadLabel}</button>
           </div>
           <div class="card-details">
             <div class="detail-title">Recommendation: ${recommendationLabel} (${raw_escape(recLabel)})</div>
@@ -1177,18 +1179,22 @@
     ).toLowerCase();
   }
 
-  function raw_loadLlmThoughtsForCard(articleId){
+  function raw_loadLlmThoughtsForCard(articleId, opts){
+    opts = opts || {};
+    const fetchText = opts.fetchText === true;
     const id = Number(articleId || 0);
     if (!id || rawState.loadingIds.has(id)) return;
 
     rawState.loadingIds.add(id);
     raw_renderPage();
-    raw_notice("busy", "🧠 Loading LLM thoughts for this article...");
-    R("raw-lastRefresh").textContent = "Loading card LLM...";
+    raw_notice("busy", fetchText
+      ? "🧠 Re-reading article text + loading fresh LLM thoughts..."
+      : "🧠 Loading LLM thoughts for this article...");
+    R("raw-lastRefresh").textContent = fetchText ? "Re-reading + scoring card LLM..." : "Loading card LLM...";
 
     raw_runRpc(
       "Card LLM thoughts",
-      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: raw_getActivePrompt(), fetchText: false }),
+      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: raw_getActivePrompt(), fetchText }),
       (res) => {
         rawState.loadingIds.delete(id);
 
@@ -1210,8 +1216,10 @@
           raw_refreshSearchText(target);
         }
 
-        raw_notice("ok", "✅ LLM thoughts loaded for this article.");
-        R("raw-lastRefresh").textContent = "Card LLM updated @ " + new Date().toLocaleTimeString();
+        raw_notice("ok", fetchText
+          ? "✅ Fresh LLM thoughts loaded after re-reading article text."
+          : "✅ LLM thoughts loaded for this article.");
+        R("raw-lastRefresh").textContent = (fetchText ? "Card re-read + LLM updated @ " : "Card LLM updated @ ") + new Date().toLocaleTimeString();
         raw_apply(false);
       },
       (err) => {
@@ -1306,10 +1314,11 @@
 
     if (t.closest("a")) return;
 
-    const llmBtn = t.closest('[data-action="llm-refresh"]');
+    const llmBtn = t.closest('[data-action="llm-refresh"], [data-action="llm-reread"]');
     if (llmBtn && llmBtn.dataset) {
       const id = Number(llmBtn.dataset.id || 0);
-      if (id) raw_loadLlmThoughtsForCard(id);
+      const action = String(llmBtn.dataset.action || "").trim();
+      if (id) raw_loadLlmThoughtsForCard(id, { fetchText: action === "llm-reread" });
       return;
     }
 

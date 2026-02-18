@@ -789,7 +789,9 @@ function ui_getRawArticles_bootstrap_v1() {
     const display = range.getDisplayValues().map(r => r.map(c => String(c || "").trim()));
 
     const headers = display[0];
-    const data = display.slice(1).filter(r => r.some(c => c.trim() !== ""));
+    const data = display.slice(1)
+      .map((r, idx) => ({ rowNo: idx + 2, row: r }))
+      .filter((entry) => entry.row.some((c) => c.trim() !== ""));
 
     const norm = (s) =>
       String(s || "").trim().toLowerCase()
@@ -852,7 +854,9 @@ function ui_getRawArticles_bootstrap_v1() {
       return isNaN(t) ? 0 : t;
     };
 
-    const rows = data.map((r, i) => {
+    const rows = data.map((entry) => {
+      const r = entry.row;
+      const rowNo = Number(entry.rowNo || 0);
       const title = (idx.title >= 0) ? r[idx.title] : "";
       const link  = (idx.link  >= 0) ? r[idx.link]  : "";
       const dateS = (idx.date  >= 0) ? r[idx.date]  : "";
@@ -901,7 +905,7 @@ function ui_getRawArticles_bootstrap_v1() {
       kwList.forEach(k => inc(keywordCounts, k));
 
       return {
-        id: i + 2,
+        id: rowNo,
         title,
         link,
         dateDisplay: dateS,
