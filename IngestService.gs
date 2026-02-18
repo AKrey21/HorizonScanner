@@ -20,7 +20,7 @@ var ING_CFG = (function () {
   var maxRuntimeMs = (typeof INGEST_MAX_RUNTIME_MS !== "undefined") ? INGEST_MAX_RUNTIME_MS : 330000;
   var fetchBatchSize = (typeof INGEST_FETCH_BATCH_SIZE !== "undefined") ? INGEST_FETCH_BATCH_SIZE : 15;
   var dailyDaysBack = (typeof INGEST_DAILY_DAYS_BACK !== "undefined") ? INGEST_DAILY_DAYS_BACK : 1;
-  var pruneDays = (typeof INGEST_PRUNE_DAYS !== "undefined") ? INGEST_PRUNE_DAYS : 30;
+  var pruneDays = (typeof INGEST_PRUNE_DAYS !== "undefined") ? INGEST_PRUNE_DAYS : 14;
 
   // If your UI.gs defines SPREADSHEET_ID, reuse it.
   var spreadsheetId = (typeof SPREADSHEET_ID !== "undefined") ? SPREADSHEET_ID : "";
@@ -53,6 +53,11 @@ function ui_importRSS_7days_v2()  {
   res._sig = "IngestService.ui_importRSS_7days_v2 @ 2026-01-13";
   return res;
 }
+function ui_importRSS_14days_v1() {
+  var res = ingest_importRSS_(14);
+  res._sig = "IngestService.ui_importRSS_14days_v1 @ 2026-02-19";
+  return res;
+}
 function ui_importRSS_daily_v1() {
   var res;
   try {
@@ -73,8 +78,8 @@ function ui_importRSS_daily_v1() {
   return res;
 }
 function ui_importRSS_30days_v2() {
-  var res = ingest_importRSS_(30);
-  res._sig = "IngestService.ui_importRSS_30days_v2 @ 2026-01-13";
+  var res = ingest_importRSS_(14);
+  res._sig = "IngestService.ui_importRSS_30days_v2 @ 2026-02-19";
   return res;
 }
 function ui_importRSS_all_v2()    {
@@ -94,9 +99,30 @@ function ui_importRSS_ping() {
  */
 function ingest_dailyRawArticles_() {
   var pruneStats = repo_pruneRawArticlesByAge_(ING_CFG.INGEST_PRUNE_DAYS);
+  pruneStats.maxAgeDays = ING_CFG.INGEST_PRUNE_DAYS;
   var ingestRes = ingest_importRSS_(ING_CFG.INGEST_DAILY_DAYS_BACK);
   ingestRes.prune = pruneStats;
-  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-01-13";
+
+  if (ingestRes && ingestRes.ok && ingestRes.stats && Number(ingestRes.stats.imported || 0) > 0) {
+    ingestRes.llm = ingest_runDailyLlmScoringForNewArticles_({ timeBudgetMs: 45000 });
+
+    if (ingestRes.llm && ingestRes.llm.status === "in_progress") {
+      ingestRes.llm.queue = ingest_scheduleDailyLlmScoring_();
+    }
+
+    if (ingestRes.llm && ingestRes.llm.ok === false) {
+      if (!Array.isArray(ingestRes.errors)) ingestRes.errors = [];
+      ingestRes.errors.push("Daily LLM scoring warning: " + String(ingestRes.llm.message || "Unknown LLM scoring error"));
+    }
+  } else {
+    ingestRes.llm = {
+      ok: true,
+      status: "skipped",
+      message: "No new articles imported; LLM scoring skipped."
+    };
+  }
+
+  ingestRes._sig = "IngestService.ingest_dailyRawArticles_ @ 2026-02-19";
   try {
     var props = PropertiesService.getScriptProperties();
     props.setProperty("RAW_INGEST_LAST_RUN", new Date().toISOString());
@@ -118,6 +144,115 @@ function ingest_dailyRawArticles_() {
     console.log("Failed to record RAW_INGEST_LAST_RUN:", e);
   }
   return ingestRes;
+}
+
+function ingest_scheduleDailyLlmScoring_() {
+  var handlerName = "ingest_runDailyLlmScoringJob_";
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    var removed = 0;
+    triggers.forEach(function (t) {
+      if (t.getHandlerFunction && t.getHandlerFunction() === handlerName) {
+        ScriptApp.deleteTrigger(t);
+        removed += 1;
+      }
+    });
+
+    ScriptApp.newTrigger(handlerName)
+      .timeBased()
+      .after(5000)
+      .create();
+
+    return {
+      ok: true,
+      status: "queued",
+      handler: handlerName,
+      replacedTriggers: removed,
+      message: "Daily LLM scoring queued to run in background."
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: "queue_error",
+      handler: handlerName,
+      message: String(err && err.message ? err.message : err)
+    };
+  }
+}
+
+function ingest_runDailyLlmScoringJob_() {
+  var handlerName = "ingest_runDailyLlmScoringJob_";
+  var res = ingest_runDailyLlmScoringForNewArticles_({});
+
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction && t.getHandlerFunction() === handlerName) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  if (res && res.ok && res.status === "in_progress") {
+    try {
+      ScriptApp.newTrigger(handlerName)
+        .timeBased()
+        .after(15000)
+        .create();
+    } catch (e) {
+      if (!Array.isArray(res.errors)) res.errors = [];
+      res.errors.push("Failed to queue next LLM scoring pass: " + String(e && e.message ? e.message : e));
+    }
+  }
+
+  return res;
+}
+
+function ingest_runDailyLlmScoringForNewArticles_(opts) {
+  if (typeof ui_runRawArticlesLlmRank_v2 !== "function") {
+    return { ok: false, message: "LLM scoring function ui_runRawArticlesLlmRank_v2 is unavailable." };
+  }
+
+  var prompt = (typeof RAW_LLM_GUIDE_TEXT !== "undefined" && RAW_LLM_GUIDE_TEXT)
+    ? RAW_LLM_GUIDE_TEXT
+    : "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+
+  var lastRes = ui_runRawArticlesLlmRank_v2({
+    prompt: prompt,
+    maxRows: 0,
+    fetchText: false,
+    sectorBy: "theme",
+    timeBudgetMs: Number(opts && opts.timeBudgetMs || 0)
+  });
+
+  if (!lastRes || lastRes.ok !== true) {
+    return {
+      ok: false,
+      message: (lastRes && lastRes.message) ? lastRes.message : "LLM scoring returned no response.",
+      response: lastRes || null
+    };
+  }
+
+  return {
+    ok: true,
+    status: lastRes.status || "done",
+    meta: lastRes.meta || null,
+    errors: Array.isArray(lastRes.errors) ? lastRes.errors : []
+  };
+}
+
+function ui_pruneRawArticlesNow_v1(payload) {
+  var daysRaw = payload && payload.days;
+  var days = Number(daysRaw || ING_CFG.INGEST_PRUNE_DAYS || 14);
+  if (!isFinite(days) || days <= 0) days = ING_CFG.INGEST_PRUNE_DAYS || 14;
+  days = Math.max(1, Math.round(days));
+
+  var stats = repo_pruneRawArticlesByAge_(days);
+  stats.maxAgeDays = days;
+  return {
+    ok: true,
+    message: "Pruned Raw Articles older than " + days + " days.",
+    prune: stats,
+    _sig: "IngestService.ui_pruneRawArticlesNow_v1 @ 2026-02-19"
+  };
 }
 
 /**

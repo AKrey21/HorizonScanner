@@ -330,12 +330,9 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     const existingCachePayload = raw_readLlmRankSheet_();
     const existingResults = Array.isArray(existingCachePayload?.results) ? existingCachePayload.results : [];
     const scoredByLink = new Map();
-    const scoredByTitle = new Map();
     existingResults.forEach((item) => {
       const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
       if (linkNorm) scoredByLink.set(linkNorm, item);
-      const titleKey = String(item?.title || "").trim().toLowerCase();
-      if (titleKey) scoredByTitle.set(titleKey, item);
     });
 
     const pendingRows = [];
@@ -351,9 +348,13 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
     rows.forEach((row, idx) => {
       const linkNorm = feeds_normalizeLink_(row?.link || row?.url);
-      const titleKey = String(row?.title || "").trim().toLowerCase();
-      const cached = (linkNorm && scoredByLink.get(linkNorm)) || (titleKey && scoredByTitle.get(titleKey)) || null;
-      if (cached) {
+      const cached = (linkNorm && scoredByLink.get(linkNorm)) || null;
+      const cachedLlm = cached?.llm || {};
+      const cachedHasScore = Number.isFinite(Number(cachedLlm?.final_score));
+      const cachedHasRec = String(cachedLlm?.publish_recommendation || cachedLlm?.recommendation || "").trim().length > 0;
+      const cachedHasSummary = String(cachedLlm?.summary || "").trim().length > 0;
+
+      if (cached && cachedHasScore && cachedHasRec && cachedHasSummary) {
         pushScored({
           key: row.link || row.title,
           title: String(cached?.title || row?.title || ""),
@@ -369,6 +370,10 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     });
 
     const startedAt = Date.now();
+    const rawBudgetMs = Number(payload?.timeBudgetMs || 0);
+    const effectiveTimeBudgetMs = Number.isFinite(rawBudgetMs) && rawBudgetMs > 0
+      ? Math.max(10000, Math.min(rawBudgetMs, RAW_LLM_RANK_TIME_BUDGET_MS))
+      : RAW_LLM_RANK_TIME_BUDGET_MS;
     const errors = [];
     const progress = raw_getLlmRankProgress_();
     const sameJob = progress &&
@@ -385,7 +390,6 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     if (progressScored.length) progressScored.forEach((item) => pushScored(item));
 
     let promptChars = sameJob ? Number(progress?.promptChars || 0) : 0;
-    const newlyScoredRowIndexes = new Set();
 
     const sectors = new Map();
     pendingRows.forEach((entry) => {
@@ -410,7 +414,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       }
 
       for (let i = nextIndex; i < sectorRows.length; i += 1) {
-        if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
+        if (Date.now() - startedAt > effectiveTimeBudgetMs) {
           nextIndex = i;
           break;
         }
@@ -421,7 +425,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           const article = raw_buildLlmArticle_(row, scoreFetchText);
           const llmPrompt = raw_buildLlmScorePrompt_(prompt, article);
           promptChars += llmPrompt.length;
-          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 600 });
+          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
           const parsed = feeds_safeParseJsonObject_(responseText);
           if (!parsed) {
             errors.push(`[${currentSector}] No JSON parsed for: ${article.url || article.title}`);
@@ -443,14 +447,13 @@ function ui_runRawArticlesLlmRank_v2(payload) {
             llm,
             row_index: scoredRowIndex
           });
-          newlyScoredRowIndexes.add(scoredRowIndex);
         } catch (err) {
           errors.push(`[${currentSector}] ${String(err?.message || err)}`);
         }
         nextIndex = i + 1;
       }
 
-      if (Date.now() - startedAt > RAW_LLM_RANK_TIME_BUDGET_MS) {
+      if (Date.now() - startedAt > effectiveTimeBudgetMs) {
         break;
       }
 
@@ -508,66 +511,14 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       .filter((item) => raw_isLlmRecommended_(item?.llm || {}))
       .sort((a, b) => (Number(b?.llm?.final_score || 0) - Number(a?.llm?.final_score || 0)));
 
-    const cachedRecommended = recommendedCandidates
-      .filter((item) => !newlyScoredRowIndexes.has(Number(item?.row_index || -1)))
-      .map((item) => ({
-        key: item?.key || "",
-        title: item?.title || "",
-        url: item?.url || "",
-        theme: item?.theme || "",
-        poi: item?.poi || "",
-        llm: item?.llm || {}
-      }));
-
-    const results = cachedRecommended.slice();
-    const topCandidates = recommendedCandidates
-      .filter((item) => newlyScoredRowIndexes.has(Number(item?.row_index || -1)));
-
-    topCandidates.forEach((candidate) => {
-      try {
-        const article = raw_buildLlmArticle_(rows[candidate.row_index], fetchText);
-        const llmPrompt = raw_buildLlmPrompt_(prompt, article);
-        promptChars += llmPrompt.length;
-        const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
-        const parsed = feeds_safeParseJsonObject_(responseText);
-        if (!parsed) {
-          errors.push(`No JSON parsed for: ${article.url || article.title}`);
-          results.push({
-            key: candidate.key,
-            title: candidate.title,
-            url: candidate.url,
-            theme: candidate.theme,
-            poi: candidate.poi,
-            llm: candidate.llm || {}
-          });
-          return;
-        }
-
-        const finalScore = Number(parsed.final_score);
-        const llm = Object.assign({}, parsed, {
-          final_score: Number.isFinite(finalScore) ? finalScore : 0
-        });
-
-        results.push({
-          key: candidate.key,
-          title: article.title,
-          url: article.url,
-          theme: article.theme,
-          poi: article.poi,
-          llm
-        });
-      } catch (err) {
-        errors.push(String(err?.message || err));
-        results.push({
-          key: candidate.key,
-          title: candidate.title,
-          url: candidate.url,
-          theme: candidate.theme,
-          poi: candidate.poi,
-          llm: candidate.llm || {}
-        });
-      }
-    });
+    const results = recommendedCandidates.map((item) => ({
+      key: item?.key || "",
+      title: item?.title || "",
+      url: item?.url || "",
+      theme: item?.theme || "",
+      poi: item?.poi || "",
+      llm: item?.llm || {}
+    }));
 
     const meta = {
       prompt,
@@ -580,7 +531,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       total_rows: rows.length,
       pending_rows: pendingRows.length,
       score_fetch_text: scoreFetchText,
-      top_n_fetch_text: fetchText,
+      top_n_fetch_text: false,
       prompt_chars_total: promptChars,
       tokens_estimate: estimateTokensFromChars_(promptChars),
       source: "Raw Articles",
@@ -709,23 +660,19 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
   if (!bodyRows) return;
   const body = sh.getRange(2, 1, bodyRows, rowColCount).getDisplayValues();
   const rowByLink = new Map();
-  const rowByTitle = new Map();
 
   body.forEach((row, idx) => {
     const rowNo = idx + 2;
-    const title = String(row[0] || "").trim().toLowerCase();
     const link = String((row[1] || "")).trim();
     const linkNorm = feeds_normalizeLink_(link);
     if (linkNorm && !rowByLink.has(linkNorm)) rowByLink.set(linkNorm, rowNo);
-    if (title && !rowByTitle.has(title)) rowByTitle.set(title, rowNo);
   });
 
   const updates = [];
   items.forEach((item) => {
     const llm = item?.llm || {};
     const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
-    const titleKey = String(item?.title || "").trim().toLowerCase();
-    const rowNo = (linkNorm && rowByLink.get(linkNorm)) || (titleKey && rowByTitle.get(titleKey));
+    const rowNo = (linkNorm && rowByLink.get(linkNorm));
     if (!rowNo) return;
 
     const reasons = Array.isArray(llm.score_reasons)
@@ -1205,9 +1152,9 @@ function raw_buildLlmPrompt_(userPrompt, article) {
 }
 
 function raw_buildLlmScorePrompt_(userPrompt, article) {
-  const clippedText = clampText_(article.text, RAW_LLM_SCORE_MAX_TEXT_CHARS);
+  const clippedText = clampText_(article.text, RAW_LLM_MAX_TEXT_CHARS);
   return [
-    RAW_LLM_SCORE_ONLY_GUIDE_TEXT,
+    RAW_LLM_GUIDE_TEXT,
     "",
     `User prompt (sorting intent): ${userPrompt}`,
     "",
