@@ -738,8 +738,35 @@ function ui_getRawArticles_v4(opts) {
  * - returns facets (themes/pois/sources/keywords) with counts
  * - supports your UI to do multi-filter + sort locally
  */
+function ui_maybePruneRawArticlesByRetention_() {
+  try {
+    var days = (typeof INGEST_PRUNE_DAYS !== "undefined" && INGEST_PRUNE_DAYS) ? Number(INGEST_PRUNE_DAYS) : 14;
+    if (!isFinite(days) || days <= 0) days = 14;
+    days = Math.max(1, Math.round(days));
+
+    var props = PropertiesService.getScriptProperties();
+    var key = "RAW_ARTICLES_RETENTION_LAST_PRUNE_MS";
+    var now = Date.now();
+    var lastMs = Number(props.getProperty(key) || 0);
+    var minIntervalMs = 60 * 60 * 1000; // at most once per hour
+
+    if (lastMs && (now - lastMs) < minIntervalMs) {
+      return { ok: true, skipped: true, maxAgeDays: days };
+    }
+
+    var stats = repo_pruneRawArticlesByAge_(days) || { removed: 0, kept: 0 };
+    stats.maxAgeDays = days;
+    props.setProperty(key, String(now));
+    return { ok: true, skipped: false, prune: stats, maxAgeDays: days };
+  } catch (err) {
+    return { ok: false, message: err && err.message ? err.message : String(err) };
+  }
+}
+
 function ui_getRawArticles_bootstrap_v1() {
   try {
+    ui_maybePruneRawArticlesByRetention_();
+
     const ss = getSpreadsheet_();
     const sheetName = getRawArticlesSheetName_();
     const sh = ss.getSheetByName(sheetName);
