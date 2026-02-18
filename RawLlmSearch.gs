@@ -619,8 +619,10 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
     }
 
     const finalScore = Number(parsed.final_score);
+    const llmSummarySafe = String(parsed.summary || "").trim() || raw_buildFallbackSummary_(article, row);
     const llm = Object.assign({}, parsed, {
-      final_score: Number.isFinite(finalScore) ? finalScore : 0
+      final_score: Number.isFinite(finalScore) ? finalScore : 0,
+      summary: llmSummarySafe
     });
 
     const scoredItem = {
@@ -1182,6 +1184,21 @@ function raw_buildLlmArticle_(row, fetchText) {
     poi,
     text: textSnippet
   };
+}
+
+function raw_buildFallbackSummary_(article, row) {
+  const articleText = String(article?.text || "").trim();
+  if (articleText) return articleText.slice(0, 320);
+
+  const keywordHint = String(row?.keywords || "").trim();
+  const fallback = [
+    String(row?.title || article?.title || "").trim(),
+    keywordHint ? `Keywords: ${keywordHint}` : "",
+    String(row?.theme || article?.theme || "").trim() ? `Theme: ${String(row?.theme || article?.theme || "").trim()}` : "",
+    String(row?.poi || article?.poi || "").trim() ? `POI: ${String(row?.poi || article?.poi || "").trim()}` : ""
+  ].filter(Boolean).join(" | ");
+
+  return fallback.slice(0, 320);
 }
 
 function raw_buildLlmPrompt_(userPrompt, article) {
