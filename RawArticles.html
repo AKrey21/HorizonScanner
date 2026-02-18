@@ -497,20 +497,41 @@
     <button class="btn" onclick="raw_clear()">Clear</button>
 
       <div class="rightControls">
-      <div class="label" style="margin-right:6px;">Ingest RSS:</div>
+      <div class="label" style="margin-right:6px;">Actions:</div>
       <div class="row tight" style="flex-wrap:wrap;">
-        <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Last 7 days</button>
-        <button class="btn" id="raw-import30Btn" onclick="raw_importRss('30')">Last 30 days</button>
-        <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">All time</button>
         <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
-          Daily (12:00 + prune 30d)
+          Daily (prune 14d)
         </button>
-        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run LLM score (new only)</button>
+        <button class="btn" id="raw-import14Btn" onclick="raw_importRss('14')">Import last 14 days</button>
+        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run AI scoring (new only)</button>
+        <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh</button>
       </div>
-      <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh Table</button>
+      <details id="raw-advancedActions" style="margin-top:8px;">
+        <summary class="label" style="cursor:pointer;">More actions</summary>
+        <div class="row tight" style="margin-top:8px; flex-wrap:wrap;">
+          <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Import last 7 days</button>
+          <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">Import all time</button>
+          <button class="btn" id="raw-prune14Btn" onclick="raw_pruneToTwoWeeksNow()">Prune & reset to 14 days</button>
+        </div>
+      </details>
     </div>
     </div>
   </div>
+
+  <details class="panel" id="raw-debugPromptPanel" style="margin-top:10px;">
+    <summary class="label" style="cursor:pointer;">LLM debug prompt tools</summary>
+    <div class="row" style="margin-top:8px; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+      <textarea id="raw-llmPrompt" style="min-height:90px; flex:1 1 560px; background:var(--fs-card); color:var(--fs-text); border:1px solid var(--fs-border); border-radius:12px; padding:10px;" placeholder="Override prompt for AI scoring/debug runs."></textarea>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:220px;">
+        <button class="btn" onclick="raw_resetPromptDefault()">Use default prompt</button>
+        <button class="btn" onclick="raw_applyPromptPreset('strict')">Preset: strict evidence</button>
+        <button class="btn" onclick="raw_applyPromptPreset('summary')">Preset: summary quality</button>
+        <button class="btn" onclick="raw_applyPromptPreset('sanity')">Preset: sanity-check JSON</button>
+      </div>
+    </div>
+    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)” and “Load LLM thoughts”.</div>
+  </details>
+
 
   <!-- Split area -->
   <div class="main">
@@ -526,6 +547,7 @@
         <div class="boxHead">
           <div class="label">Sort + Date range (optional)</div>
           <button class="btn ghost mini" onclick="raw_quickToday()">Today</button>
+          <button class="btn ghost mini" onclick="raw_resetToTwoWeeksView()">Reset 14d</button>
         </div>
         <div class="row">
           <select id="raw-sort">
@@ -654,6 +676,11 @@
   };
 
   const RAW_LLM_DEFAULT_PROMPT = "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+  const RAW_LLM_DEBUG_PROMPT_PRESETS = {
+    strict: "Score each article with strict evidence standards. Penalize weak sourcing, unsupported claims, and vague policy relevance. Return full JSON with concise summary and concrete score_reasons.",
+    summary: "Focus on summary quality. Ensure summary is factual, article-specific, and 80–90 words with 1–2 bolded phrases. Return full JSON and avoid generic boilerplate.",
+    sanity: "Before finalizing, self-check that title/url/date/source align with the given article and that output is valid JSON matching schema."
+  };
 
   const R = (id) => document.getElementById(id);
 
@@ -666,6 +693,23 @@
     const box = R("raw-notice");
     box.className = "notice";
     box.textContent = "";
+  }
+
+  function raw_getActivePrompt(){
+    const custom = String((R("raw-llmPrompt")?.value || "")).trim();
+    return custom || RAW_LLM_DEFAULT_PROMPT;
+  }
+
+  function raw_resetPromptDefault(){
+    if (R("raw-llmPrompt")) R("raw-llmPrompt").value = RAW_LLM_DEFAULT_PROMPT;
+    raw_notice("ok", "✅ Using default LLM prompt.");
+  }
+
+  function raw_applyPromptPreset(kind){
+    const preset = RAW_LLM_DEBUG_PROMPT_PRESETS[String(kind || "").trim()];
+    if (!preset) return;
+    if (R("raw-llmPrompt")) R("raw-llmPrompt").value = preset;
+    raw_notice("ok", "✅ Applied debug prompt preset: " + kind);
   }
 
   function raw_escape(str){
@@ -684,7 +728,7 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import30Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn"].forEach(id => {
+    ["raw-import7Btn","raw-import14Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn","raw-prune14Btn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
@@ -905,6 +949,9 @@
 
         raw_renderAllChips();
         raw_apply(true);
+        if (R("raw-llmPrompt") && !String(R("raw-llmPrompt").value || "").trim()) {
+          R("raw-llmPrompt").value = RAW_LLM_DEFAULT_PROMPT;
+        }
       },
       (err) => {
         const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
@@ -1141,7 +1188,7 @@
 
     raw_runRpc(
       "Card LLM thoughts",
-      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: RAW_LLM_DEFAULT_PROMPT, fetchText: false }),
+      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: raw_getActivePrompt(), fetchText: false }),
       (res) => {
         rawState.loadingIds.delete(id);
 
@@ -1211,6 +1258,45 @@
     R("raw-dateFrom").value = iso;
     R("raw-dateTo").value = iso;
     raw_apply(true);
+  }
+
+  function raw_resetToTwoWeeksView(){
+    raw_clear();
+    const d = new Date();
+    const from = new Date(d.getTime());
+    from.setDate(from.getDate() - 13);
+    const toIso = d.toISOString().slice(0,10);
+    const fromIso = from.toISOString().slice(0,10);
+    R("raw-dateFrom").value = fromIso;
+    R("raw-dateTo").value = toIso;
+    raw_apply(true);
+    raw_notice("ok", "✅ Filters reset to last 14 days.");
+  }
+
+  function raw_pruneToTwoWeeksNow(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "🧹 Pruning Raw Articles older than 14 days…");
+    raw_runRpc(
+      "Prune Raw Articles",
+      (gs) => gs.ui_pruneRawArticlesNow_v1({ days: 14 }),
+      (res) => {
+        raw_setBusyUI(false);
+        if (!res || res.ok !== true) {
+          raw_notice("err", "❌ Prune failed.\n" + JSON.stringify(res, null, 2));
+          return;
+        }
+        const prune = res.prune || {};
+        raw_notice("ok", `✅ Prune complete.\nRemoved: ${prune.removed || 0}\nKept: ${prune.kept || 0}\nWindow: ${prune.maxAgeDays || 14} days`);
+        raw_resetToTwoWeeksView();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Prune RPC error:\n" + msg);
+      },
+      { warnAfterMs: 15000, hardTimeoutMs: 180000 }
+    );
   }
 
   // quick-filter tags + card expand on click
@@ -1303,6 +1389,7 @@
       "Ingesting RSS",
       (gs) => {
         if (range === "daily") gs.ui_importRSS_daily_v1();
+        else if (range === "14") gs.ui_importRSS_14days_v1();
         else if (range === "30") gs.ui_importRSS_30days_v2();
         else if (range === "all") gs.ui_importRSS_all_v2();
         else gs.ui_importRSS_7days_v2();
@@ -1332,7 +1419,7 @@
           `Feed errors: ${s.feedErrors || 0}`;
 
         if (res.prune) {
-          msg += `\nPruned (>30 days): ${res.prune.removed || 0}`;
+          msg += `\nPruned (>${res.prune.maxAgeDays || 14} days): ${res.prune.removed || 0}`;
         }
 
         if (Array.isArray(res.errors) && res.errors.length) {
@@ -1360,7 +1447,7 @@
 
   function raw_runLlmScore(){
     raw_setBusyUI(true);
-    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…");
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
     R("raw-lastRefresh").textContent = "LLM scoring…";
     raw_pollLlmScore();
   }
@@ -1368,7 +1455,7 @@
   function raw_pollLlmScore(){
     raw_runRpc(
       "LLM scoring",
-      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false, sectorBy: "theme" }),
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: false, sectorBy: "theme" }),
       (res) => {
         if (!res || res.ok !== true) {
           raw_setBusyUI(false);
