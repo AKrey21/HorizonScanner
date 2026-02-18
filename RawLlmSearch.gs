@@ -704,9 +704,12 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
   const body = sh.getRange(2, 1, bodyRows, rowColCount).getDisplayValues();
   const rowByLink = new Map();
 
+  const linkCol = raw_findHeaderIndex_(headerValues, ["link", "url", "article url", "article_url", "source url", "source_url"]);
+  const linkColIdx = Math.max(0, Number(linkCol || 2) - 1);
+
   body.forEach((row, idx) => {
     const rowNo = idx + 2;
-    const link = String((row[1] || "")).trim();
+    const link = String((row[linkColIdx] || "")).trim();
     const linkNorm = feeds_normalizeLink_(link);
     if (linkNorm && !rowByLink.has(linkNorm)) rowByLink.set(linkNorm, { rowNo, row });
   });
@@ -715,7 +718,15 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
   items.forEach((item) => {
     const llm = item?.llm || {};
     const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
-    const rowMeta = linkNorm ? rowByLink.get(linkNorm) : null;
+    let rowMeta = linkNorm ? rowByLink.get(linkNorm) : null;
+
+    if (!rowMeta) {
+      const rowIndex = Number(item?.row_index);
+      if (Number.isFinite(rowIndex) && rowIndex >= 0 && rowIndex < body.length) {
+        rowMeta = { rowNo: rowIndex + 2, row: body[rowIndex] };
+      }
+    }
+
     const rowNo = rowMeta?.rowNo;
     if (!rowNo) return;
 
@@ -751,6 +762,18 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
     sh.getRange(u.rowNo, llmCols.summary, 1, 1).setValue(u.summary);
     sh.getRange(u.rowNo, llmCols.reasons, 1, 1).setValue(u.reasons);
   });
+}
+
+function raw_findHeaderIndex_(headerValues, names) {
+  const headers = Array.isArray(headerValues) ? headerValues : [];
+  const targets = (Array.isArray(names) ? names : []).map((x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " "));
+  if (!targets.length) return 0;
+
+  for (let i = 0; i < headers.length; i += 1) {
+    const h = String(headers[i] || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (targets.includes(h)) return i + 1;
+  }
+  return 0;
 }
 
 function raw_ensureLlmColumns_(sheet, headerValues) {
