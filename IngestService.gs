@@ -218,7 +218,7 @@ function ingest_runDailyLlmScoringForNewArticles_(opts) {
   var lastRes = ui_runRawArticlesLlmRank_v2({
     prompt: prompt,
     maxRows: 0,
-    fetchText: false,
+    fetchText: true,
     sectorBy: "theme",
     timeBudgetMs: Number(opts && opts.timeBudgetMs || 0)
   });

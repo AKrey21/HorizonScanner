@@ -1563,7 +1563,7 @@
 
   function raw_runLlmScore(){
     raw_setBusyUI(true);
-    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles (full re-read enabled)…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
     R("raw-lastRefresh").textContent = "LLM scoring…";
     raw_pollLlmScore();
   }
@@ -1571,7 +1571,7 @@
   function raw_pollLlmScore(){
     raw_runRpc(
       "LLM scoring",
-      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: false, sectorBy: "theme" }),
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: true, sectorBy: "theme" }),
       (res) => {
         if (!res || res.ok !== true) {
           raw_setBusyUI(false);
