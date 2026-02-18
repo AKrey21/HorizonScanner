@@ -518,6 +518,21 @@
     </div>
   </div>
 
+  <details class="panel" id="raw-debugPromptPanel" style="margin-top:10px;">
+    <summary class="label" style="cursor:pointer;">LLM debug prompt tools</summary>
+    <div class="row" style="margin-top:8px; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+      <textarea id="raw-llmPrompt" style="min-height:90px; flex:1 1 560px; background:var(--fs-card); color:var(--fs-text); border:1px solid var(--fs-border); border-radius:12px; padding:10px;" placeholder="Override prompt for AI scoring/debug runs."></textarea>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:220px;">
+        <button class="btn" onclick="raw_resetPromptDefault()">Use default prompt</button>
+        <button class="btn" onclick="raw_applyPromptPreset('strict')">Preset: strict evidence</button>
+        <button class="btn" onclick="raw_applyPromptPreset('summary')">Preset: summary quality</button>
+        <button class="btn" onclick="raw_applyPromptPreset('sanity')">Preset: sanity-check JSON</button>
+      </div>
+    </div>
+    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)” and “Load LLM thoughts”.</div>
+  </details>
+
+
   <!-- Split area -->
   <div class="main">
     <!-- Sidebar -->
@@ -661,6 +676,11 @@
   };
 
   const RAW_LLM_DEFAULT_PROMPT = "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+  const RAW_LLM_DEBUG_PROMPT_PRESETS = {
+    strict: "Score each article with strict evidence standards. Penalize weak sourcing, unsupported claims, and vague policy relevance. Return full JSON with concise summary and concrete score_reasons.",
+    summary: "Focus on summary quality. Ensure summary is factual, article-specific, and 80–90 words with 1–2 bolded phrases. Return full JSON and avoid generic boilerplate.",
+    sanity: "Before finalizing, self-check that title/url/date/source align with the given article and that output is valid JSON matching schema."
+  };
 
   const R = (id) => document.getElementById(id);
 
@@ -673,6 +693,23 @@
     const box = R("raw-notice");
     box.className = "notice";
     box.textContent = "";
+  }
+
+  function raw_getActivePrompt(){
+    const custom = String((R("raw-llmPrompt")?.value || "")).trim();
+    return custom || RAW_LLM_DEFAULT_PROMPT;
+  }
+
+  function raw_resetPromptDefault(){
+    if (R("raw-llmPrompt")) R("raw-llmPrompt").value = RAW_LLM_DEFAULT_PROMPT;
+    raw_notice("ok", "✅ Using default LLM prompt.");
+  }
+
+  function raw_applyPromptPreset(kind){
+    const preset = RAW_LLM_DEBUG_PROMPT_PRESETS[String(kind || "").trim()];
+    if (!preset) return;
+    if (R("raw-llmPrompt")) R("raw-llmPrompt").value = preset;
+    raw_notice("ok", "✅ Applied debug prompt preset: " + kind);
   }
 
   function raw_escape(str){
@@ -912,6 +949,9 @@
 
         raw_renderAllChips();
         raw_apply(true);
+        if (R("raw-llmPrompt") && !String(R("raw-llmPrompt").value || "").trim()) {
+          R("raw-llmPrompt").value = RAW_LLM_DEFAULT_PROMPT;
+        }
       },
       (err) => {
         const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
@@ -1148,7 +1188,7 @@
 
     raw_runRpc(
       "Card LLM thoughts",
-      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: RAW_LLM_DEFAULT_PROMPT, fetchText: false }),
+      (gs) => gs.ui_runRawArticleLlmThoughts_v1({ id, prompt: raw_getActivePrompt(), fetchText: false }),
       (res) => {
         rawState.loadingIds.delete(id);
 
@@ -1407,7 +1447,7 @@
 
   function raw_runLlmScore(){
     raw_setBusyUI(true);
-    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…");
+    raw_notice("busy", "🧠 Running LLM scoring for unscored articles…\nPrompt source: " + (String((R("raw-llmPrompt")?.value || "")).trim() ? "custom/debug" : "default"));
     R("raw-lastRefresh").textContent = "LLM scoring…";
     raw_pollLlmScore();
   }
@@ -1415,7 +1455,7 @@
   function raw_pollLlmScore(){
     raw_runRpc(
       "LLM scoring",
-      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: RAW_LLM_DEFAULT_PROMPT, maxRows: 0, fetchText: false, sectorBy: "theme" }),
+      (gs) => gs.ui_runRawArticlesLlmRank_v2({ prompt: raw_getActivePrompt(), maxRows: 0, fetchText: false, sectorBy: "theme" }),
       (res) => {
         if (!res || res.ok !== true) {
           raw_setBusyUI(false);
