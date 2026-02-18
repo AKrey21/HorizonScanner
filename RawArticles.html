@@ -309,6 +309,13 @@
       gap:6px;
     }
 
+    .card-actions-top{
+      display:flex;
+      justify-content:flex-end;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
     .tag{
       font-size:11px;
       padding:4px 8px;
@@ -334,13 +341,6 @@
       gap:6px;
       max-height:52px;
       overflow:hidden;
-    }
-
-    .card-llm-actions{
-      margin-left:auto;
-      display:flex;
-      flex:0 0 auto;
-      gap:6px;
     }
 
     .card-llm-btn{
@@ -479,7 +479,7 @@
       .side{ grid-template-columns: 1fr; }
       .card-footer{ flex-wrap:wrap; }
       .card-kws{ max-height:none; }
-      .card-llm-actions{ width:100%; justify-content:flex-end; }
+      .card-actions-top{ justify-content:flex-start; }
     }
   </style>
 
@@ -1153,6 +1153,10 @@
           <div class="card-body">
             <div class="card-title">${titleHtml}</div>
             <div class="card-desc">${desc}</div>
+            <div class="card-actions-top">
+              <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""}>${llmBtnLabel}</button>
+              <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again and rescore with LLM">${llmRereadLabel}</button>
+            </div>
             <div class="card-tags">
               ${tag("source", srcRaw)}
               ${tag("theme", thmRaw)}
@@ -1162,10 +1166,6 @@
           </div>
           <div class="card-footer">
             <div class="card-kws">${kws}</div>
-            <div class="card-llm-actions">
-              <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""}>${llmBtnLabel}</button>
-              <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again and rescore with LLM">${llmRereadLabel}</button>
-            </div>
           </div>
           <div class="card-details">
             <div class="detail-title">Recommendation: ${recommendationLabel} (${raw_escape(recLabel)})</div>
