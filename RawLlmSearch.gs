@@ -245,6 +245,20 @@ const RAW_LLM_SCORE_COL = "LLM Score";
 const RAW_LLM_REC_COL = "LLM Recommendation";
 const RAW_LLM_SUMMARY_COL = "LLM Summary";
 const RAW_LLM_REASONS_COL = "LLM Reasons";
+const RAW_LLM_CARD_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    final_score: { type: "number" },
+    publish_recommendation: { type: "string" },
+    recommendation: { type: "string" },
+    summary: { type: "string" },
+    score_reasons: {
+      type: "array",
+      items: { type: "string" }
+    }
+  },
+  required: ["final_score", "summary", "score_reasons"]
+};
 
 function raw_isLlmRecommended_(llm) {
   const raw = String(llm?.publish_recommendation || llm?.recommendation || "").trim().toLowerCase();
@@ -579,7 +593,10 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
     let effectiveFetchText = fetchText;
     let article = raw_buildLlmArticle_(row, effectiveFetchText);
     let llmPrompt = raw_buildLlmPrompt_(prompt, article);
-    let responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+    let responseText = aiGenerateJson_(llmPrompt, {
+      maxOutputTokens: 1200,
+      responseSchema: RAW_LLM_CARD_RESPONSE_SCHEMA
+    });
     let parsed = feeds_safeParseJsonObject_(responseText);
     if (!parsed) return { ok: false, message: "No JSON parsed from LLM response." };
 
@@ -593,7 +610,10 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
       effectiveFetchText = true;
       article = raw_buildLlmArticle_(row, effectiveFetchText);
       llmPrompt = raw_buildLlmPrompt_(prompt, article);
-      responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+      responseText = aiGenerateJson_(llmPrompt, {
+        maxOutputTokens: 1200,
+        responseSchema: RAW_LLM_CARD_RESPONSE_SCHEMA
+      });
       const parsedRetry = feeds_safeParseJsonObject_(responseText);
       if (parsedRetry) parsed = parsedRetry;
     }
@@ -621,6 +641,9 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
     const llmReasons = Array.isArray(llm.score_reasons)
       ? llm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
       : [];
+    const llmReasonsSafe = llmReasons.length
+      ? llmReasons
+      : (Array.isArray(row.llmReasons) ? row.llmReasons.map((x) => String(x || "").trim()).filter(Boolean) : []);
 
     return {
       ok: true,
@@ -630,7 +653,7 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
         llmRecommendation,
         llmRecommended: raw_isLlmRecommended_(llm),
         llmSummary,
-        llmReasons
+        llmReasons: llmReasonsSafe
       },
       meta: {
         source: "Raw Articles",
