@@ -211,8 +211,8 @@ function ingest_runDailyLlmScoringForNewArticles_(opts) {
     return { ok: false, message: "LLM scoring function ui_runRawArticlesLlmRank_v2 is unavailable." };
   }
 
-  var prompt = (typeof RAW_LLM_SCORE_ONLY_GUIDE_TEXT !== "undefined" && RAW_LLM_SCORE_ONLY_GUIDE_TEXT)
-    ? RAW_LLM_SCORE_ONLY_GUIDE_TEXT
+  var prompt = (typeof RAW_LLM_GUIDE_TEXT !== "undefined" && RAW_LLM_GUIDE_TEXT)
+    ? RAW_LLM_GUIDE_TEXT
     : "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
 
   var lastRes = ui_runRawArticlesLlmRank_v2({

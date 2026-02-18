@@ -330,12 +330,9 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     const existingCachePayload = raw_readLlmRankSheet_();
     const existingResults = Array.isArray(existingCachePayload?.results) ? existingCachePayload.results : [];
     const scoredByLink = new Map();
-    const scoredByTitle = new Map();
     existingResults.forEach((item) => {
       const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
       if (linkNorm) scoredByLink.set(linkNorm, item);
-      const titleKey = String(item?.title || "").trim().toLowerCase();
-      if (titleKey) scoredByTitle.set(titleKey, item);
     });
 
     const pendingRows = [];
@@ -351,9 +348,13 @@ function ui_runRawArticlesLlmRank_v2(payload) {
 
     rows.forEach((row, idx) => {
       const linkNorm = feeds_normalizeLink_(row?.link || row?.url);
-      const titleKey = String(row?.title || "").trim().toLowerCase();
-      const cached = (linkNorm && scoredByLink.get(linkNorm)) || (titleKey && scoredByTitle.get(titleKey)) || null;
-      if (cached) {
+      const cached = (linkNorm && scoredByLink.get(linkNorm)) || null;
+      const cachedLlm = cached?.llm || {};
+      const cachedHasScore = Number.isFinite(Number(cachedLlm?.final_score));
+      const cachedHasRec = String(cachedLlm?.publish_recommendation || cachedLlm?.recommendation || "").trim().length > 0;
+      const cachedHasSummary = String(cachedLlm?.summary || "").trim().length > 0;
+
+      if (cached && cachedHasScore && cachedHasRec && cachedHasSummary) {
         pushScored({
           key: row.link || row.title,
           title: String(cached?.title || row?.title || ""),
@@ -424,7 +425,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           const article = raw_buildLlmArticle_(row, scoreFetchText);
           const llmPrompt = raw_buildLlmScorePrompt_(prompt, article);
           promptChars += llmPrompt.length;
-          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 600 });
+          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
           const parsed = feeds_safeParseJsonObject_(responseText);
           if (!parsed) {
             errors.push(`[${currentSector}] No JSON parsed for: ${article.url || article.title}`);
@@ -659,23 +660,19 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
   if (!bodyRows) return;
   const body = sh.getRange(2, 1, bodyRows, rowColCount).getDisplayValues();
   const rowByLink = new Map();
-  const rowByTitle = new Map();
 
   body.forEach((row, idx) => {
     const rowNo = idx + 2;
-    const title = String(row[0] || "").trim().toLowerCase();
     const link = String((row[1] || "")).trim();
     const linkNorm = feeds_normalizeLink_(link);
     if (linkNorm && !rowByLink.has(linkNorm)) rowByLink.set(linkNorm, rowNo);
-    if (title && !rowByTitle.has(title)) rowByTitle.set(title, rowNo);
   });
 
   const updates = [];
   items.forEach((item) => {
     const llm = item?.llm || {};
     const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
-    const titleKey = String(item?.title || "").trim().toLowerCase();
-    const rowNo = (linkNorm && rowByLink.get(linkNorm)) || (titleKey && rowByTitle.get(titleKey));
+    const rowNo = (linkNorm && rowByLink.get(linkNorm));
     if (!rowNo) return;
 
     const reasons = Array.isArray(llm.score_reasons)
@@ -1155,9 +1152,9 @@ function raw_buildLlmPrompt_(userPrompt, article) {
 }
 
 function raw_buildLlmScorePrompt_(userPrompt, article) {
-  const clippedText = clampText_(article.text, RAW_LLM_SCORE_MAX_TEXT_CHARS);
+  const clippedText = clampText_(article.text, RAW_LLM_MAX_TEXT_CHARS);
   return [
-    RAW_LLM_SCORE_ONLY_GUIDE_TEXT,
+    RAW_LLM_GUIDE_TEXT,
     "",
     `User prompt (sorting intent): ${userPrompt}`,
     "",

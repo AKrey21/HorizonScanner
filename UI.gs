@@ -827,13 +827,10 @@ function ui_getRawArticles_bootstrap_v1() {
       ? llmEntriesRaw
       : (Array.isArray(llmEntriesRaw?.results) ? llmEntriesRaw.results : []);
     const llmByLink = new Map();
-    const llmByTitle = new Map();
 
     llmEntries.forEach((item) => {
       const linkNorm = feeds_normalizeLink_(item?.url || item?.link);
       if (linkNorm) llmByLink.set(linkNorm, item?.llm || {});
-      const titleKey = String(item?.title || "").trim().toLowerCase();
-      if (titleKey) llmByTitle.set(titleKey, item?.llm || {});
     });
 
     const inc = (obj, key) => { if (!key) return; obj[key] = (obj[key] || 0) + 1; };
@@ -879,7 +876,6 @@ function ui_getRawArticles_bootstrap_v1() {
 
       const linkNorm = feeds_normalizeLink_(link);
       let llm = linkNorm ? llmByLink.get(linkNorm) : null;
-      if (!llm && title) llm = llmByTitle.get(String(title).trim().toLowerCase());
       llm = llm || {};
       const llmScoreRaw = Number(llm.final_score);
       const llmScoreCache = Number.isFinite(llmScoreRaw) ? llmScoreRaw : null;
