@@ -1496,38 +1496,89 @@
 
   function raw_freshSearch(){
     raw_setBusyUI(true);
-    raw_notice("busy", "⏳ Running fresh search…\nClearing raw articles, importing last 14 days, then scoring with AI.");
-    R("raw-lastRefresh").textContent = "Fresh search…";
+    raw_notice("busy", "⏳ Fresh search step 1/3…\nClearing Raw Articles + LLM cache.");
+    R("raw-lastRefresh").textContent = "Fresh search step 1/3…";
 
     raw_runRpc(
-      "Fresh search",
-      (gs) => gs.ui_freshSearchRawArticles_14days_v1(),
-      (res) => {
-        raw_setBusyUI(false);
+      "Fresh search step 1/3 (reset)",
+      (gs) => gs.ui_resetRawArticlesForFreshSearch_v1(),
+      () => {
+        raw_notice("busy", "⏳ Fresh search step 2/3…\nImporting RSS from the last 14 days.");
+        R("raw-lastRefresh").textContent = "Fresh search step 2/3…";
 
-        if (!res || res.ok !== true) {
-          raw_notice("err", "❌ Fresh search failed.\n\nFULL RESPONSE:\n" + JSON.stringify(res, null, 2));
-          R("raw-lastRefresh").textContent = "Failed";
-          return;
-        }
+        raw_runRpc(
+          "Fresh search step 2/3 (import)",
+          (gs) => gs.ui_importRSS_14days_v1(),
+          (importRes) => {
+            if (!importRes || importRes.ok !== true) {
+              raw_setBusyUI(false);
+              raw_notice("err", "❌ Fresh search failed during import.\n\nFULL RESPONSE:\n" + JSON.stringify(importRes, null, 2));
+              R("raw-lastRefresh").textContent = "Failed";
+              return;
+            }
 
-        const s = res.stats || {};
-        const llm = res.llm || {};
-        raw_notice(
-          "ok",
-          `✅ Fresh search complete.\n${res.message || ""}\n\nImported: ${s.imported || 0}\nDuplicates skipped: ${s.skippedDuplicate || 0}\nOld/invalid date skipped: ${s.skippedDate || 0}\nNo-match skipped: ${s.skippedNoMatch || 0}\nMissing fields skipped: ${s.skippedMissingFields || 0}\nFeed errors: ${s.feedErrors || 0}\n\nAI scoring: ${llm.message || llm.status || "done"}`
+            const s = importRes.stats || {};
+            const imported = Number(s.imported || 0);
+            if (imported <= 0) {
+              raw_setBusyUI(false);
+              raw_notice(
+                "ok",
+                `✅ Fresh search complete.\nNo new articles imported, so AI scoring was skipped.\n\nImported: ${s.imported || 0}\nDuplicates skipped: ${s.skippedDuplicate || 0}\nOld/invalid date skipped: ${s.skippedDate || 0}\nNo-match skipped: ${s.skippedNoMatch || 0}\nMissing fields skipped: ${s.skippedMissingFields || 0}\nFeed errors: ${s.feedErrors || 0}`
+              );
+              R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
+              raw_bootstrap();
+              return;
+            }
+
+            raw_notice("busy", `⏳ Fresh search step 3/3…\nScoring ${imported} imported article(s) with AI.`);
+            R("raw-lastRefresh").textContent = "Fresh search step 3/3…";
+
+            raw_runRpc(
+              "Fresh search step 3/3 (LLM scoring)",
+              (gs) => gs.ui_runDailyLlmScoringForNewArticles_v1({ timeBudgetMs: 45000 }),
+              (scoreRes) => {
+                raw_setBusyUI(false);
+
+                if (!scoreRes || scoreRes.ok !== true) {
+                  raw_notice("err", "❌ Fresh search failed during AI scoring.\n\nFULL RESPONSE:\n" + JSON.stringify(scoreRes, null, 2));
+                  R("raw-lastRefresh").textContent = "Failed";
+                  return;
+                }
+
+                const llm = scoreRes.llm || {};
+                raw_notice(
+                  "ok",
+                  `✅ Fresh search complete.\nImported and scored latest 14-day articles.\n\nImported: ${s.imported || 0}\nDuplicates skipped: ${s.skippedDuplicate || 0}\nOld/invalid date skipped: ${s.skippedDate || 0}\nNo-match skipped: ${s.skippedNoMatch || 0}\nMissing fields skipped: ${s.skippedMissingFields || 0}\nFeed errors: ${s.feedErrors || 0}\n\nAI scoring: ${llm.message || llm.status || "done"}`
+                );
+
+                R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
+                raw_bootstrap();
+              },
+              (err) => {
+                raw_setBusyUI(false);
+                const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+                raw_notice("err", "❌ Fresh search RPC error (step 3/3):\n" + msg);
+                R("raw-lastRefresh").textContent = "Failed";
+              },
+              { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
+            );
+          },
+          (err) => {
+            raw_setBusyUI(false);
+            const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+            raw_notice("err", "❌ Fresh search RPC error (step 2/3):\n" + msg);
+            R("raw-lastRefresh").textContent = "Failed";
+          },
+          { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
         );
-
-        R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
-        raw_bootstrap();
       },
       (err) => {
         raw_setBusyUI(false);
         const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
-        raw_notice("err", "❌ Fresh search RPC error:\n" + msg);
+        raw_notice("err", "❌ Fresh search RPC error (step 1/3):\n" + msg);
         R("raw-lastRefresh").textContent = "Failed";
       },
-      { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
+      { warnAfterMs: 20000, hardTimeoutMs: 2 * 60 * 1000 }
     );
   }
 
