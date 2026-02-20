@@ -1530,38 +1530,91 @@
               return;
             }
 
-            raw_notice("busy", `⏳ Fresh search step 3/3…\nScoring ${imported} imported article(s) with AI.`);
+            raw_notice("busy", `⏳ Fresh search step 3/3…
+Scoring ${imported} imported article(s) with AI.`);
             R("raw-lastRefresh").textContent = "Fresh search step 3/3…";
 
-            raw_runRpc(
-              "Fresh search step 3/3 (LLM scoring)",
-              (gs) => gs.ui_runDailyLlmScoringForNewArticles_v1({ timeBudgetMs: 45000 }),
-              (scoreRes) => {
-                raw_setBusyUI(false);
+            const scoringStartTs = Date.now();
+            const maxScoringLoopMs = 6 * 60 * 1000;
+            let scoringPass = 0;
+            let lastScoreMeta = null;
 
-                if (!scoreRes || scoreRes.ok !== true) {
-                  raw_notice("err", "❌ Fresh search failed during AI scoring.\n\nFULL RESPONSE:\n" + JSON.stringify(scoreRes, null, 2));
+            const runNextScoringPass = () => {
+              scoringPass += 1;
+              raw_runRpc(
+                `Fresh search step 3/3 (LLM scoring pass ${scoringPass})`,
+                (gs) => gs.ui_runDailyLlmScoringForNewArticles_v1({ timeBudgetMs: 45000 }),
+                (scoreRes) => {
+                  if (!scoreRes || scoreRes.ok !== true) {
+                    raw_setBusyUI(false);
+                    raw_notice("err", "❌ Fresh search failed during AI scoring.\n\nFULL RESPONSE:\n" + JSON.stringify(scoreRes, null, 2));
+                    R("raw-lastRefresh").textContent = "Failed";
+                    return;
+                  }
+
+                  const llm = scoreRes.llm || {};
+                  const meta = llm.meta || {};
+                  lastScoreMeta = meta;
+                  const scored = Number(meta.scored_total || 0);
+                  const pending = Number(meta.pending_rows || 0);
+                  const total = Number(meta.total_rows || imported || 0);
+                  const recommended = Number(meta.recommended_total || 0);
+
+                  if (llm.status === "in_progress" && (Date.now() - scoringStartTs) < maxScoringLoopMs) {
+                    raw_notice(
+                      "busy",
+                      `⏳ Fresh search step 3/3… (pass ${scoringPass})
+AI scoring in progress.
+Scored: ${scored} / ${total}
+Pending: ${pending}
+Recommended: ${recommended}`
+                    );
+                    R("raw-lastRefresh").textContent = `Fresh search step 3/3… pass ${scoringPass}`;
+                    setTimeout(runNextScoringPass, 250);
+                    return;
+                  }
+
+                  raw_setBusyUI(false);
+                  const timedOut = llm.status === "in_progress";
+                  const statusPrefix = timedOut ? "⚠️ Fresh search imported articles; AI scoring still running in background." : "✅ Fresh search complete.";
+                  const aiLine = timedOut
+                    ? `AI scoring: ${llm.message || "in progress"} (showing latest progress)`
+                    : `AI scoring: ${llm.message || llm.status || "done"}`;
+
+                  raw_notice(
+                    timedOut ? "warn" : "ok",
+                    `${statusPrefix}
+
+Imported: ${s.imported || 0}
+Duplicates skipped: ${s.skippedDuplicate || 0}
+Old/invalid date skipped: ${s.skippedDate || 0}
+No-match skipped: ${s.skippedNoMatch || 0}
+Missing fields skipped: ${s.skippedMissingFields || 0}
+Feed errors: ${s.feedErrors || 0}
+
+AI scored: ${Number(lastScoreMeta?.scored_total || 0)} / ${Number(lastScoreMeta?.total_rows || imported || 0)}
+AI pending: ${Number(lastScoreMeta?.pending_rows || 0)}
+AI recommended: ${Number(lastScoreMeta?.recommended_total || 0)}
+${aiLine}`
+                  );
+
+                  R("raw-lastRefresh").textContent = timedOut
+                    ? "Fresh search done (AI continues in background) @ " + new Date().toLocaleTimeString()
+                    : "Fresh search done @ " + new Date().toLocaleTimeString();
+                  raw_bootstrap();
+                },
+                (err) => {
+                  raw_setBusyUI(false);
+                  const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+                  raw_notice("err", "❌ Fresh search RPC error (step 3/3):\n" + msg);
                   R("raw-lastRefresh").textContent = "Failed";
-                  return;
-                }
+                },
+                { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
+              );
+            };
 
-                const llm = scoreRes.llm || {};
-                raw_notice(
-                  "ok",
-                  `✅ Fresh search complete.\nImported and scored latest 14-day articles.\n\nImported: ${s.imported || 0}\nDuplicates skipped: ${s.skippedDuplicate || 0}\nOld/invalid date skipped: ${s.skippedDate || 0}\nNo-match skipped: ${s.skippedNoMatch || 0}\nMissing fields skipped: ${s.skippedMissingFields || 0}\nFeed errors: ${s.feedErrors || 0}\n\nAI scoring: ${llm.message || llm.status || "done"}`
-                );
+            runNextScoringPass();
 
-                R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
-                raw_bootstrap();
-              },
-              (err) => {
-                raw_setBusyUI(false);
-                const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
-                raw_notice("err", "❌ Fresh search RPC error (step 3/3):\n" + msg);
-                R("raw-lastRefresh").textContent = "Failed";
-              },
-              { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
-            );
           },
           (err) => {
             raw_setBusyUI(false);
