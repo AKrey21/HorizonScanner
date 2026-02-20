@@ -720,6 +720,19 @@
 
       <div class="meta" id="raw-meta"></div>
 
+      <div class="reportBuilder">
+        <div class="reportBuilderHead">
+          <span><b>Report builder</b> • Select articles and generate directly from this page.</span>
+          <span class="pill" id="raw-reportSelCount">Selected: 0</span>
+        </div>
+        <div class="row tight">
+          <button class="btn primary mini" id="raw-generateReportBtn" onclick="raw_generateReportFromSelection()">Generate report from selected</button>
+          <button class="btn mini" onclick="raw_sendSelectionToReportPage()">Open in Report Generator</button>
+          <button class="btn mini" onclick="raw_clearSelection()">Clear selection</button>
+        </div>
+        <div id="raw-reportPreview" class="reportPreview"></div>
+      </div>
+
       <div class="wrap" id="raw-wrap">
         <div class="cards" id="raw-cards"></div>
         <div class="empty" id="raw-empty">No results. Try clearing some filters.</div>
@@ -766,6 +779,7 @@
     selSource: new Set(),
     selKwInc: new Set(),
     selKwExc: new Set(),
+    selectedLinks: new Set(),
     expandedIds: new Set(),
     loadingIds: new Set(),
     selectedIds: new Set(),
@@ -1050,6 +1064,82 @@
       });
 
     invokeFn(gs);
+  }
+
+  function raw_selectedLinksArray(){
+    return Array.from(rawState.selectedLinks.values()).map(x => String(x || "").trim()).filter(Boolean);
+  }
+
+  function raw_updateReportSelectionUi(){
+    const selected = raw_selectedLinksArray();
+    const countEl = R("raw-reportSelCount");
+    const genBtn = R("raw-generateReportBtn");
+    if (countEl) countEl.textContent = `Selected: ${selected.length}`;
+    if (genBtn) genBtn.disabled = selected.length === 0;
+  }
+
+  function raw_toggleSelection(link, checked){
+    const clean = String(link || "").trim();
+    if (!clean) return;
+    if (checked) rawState.selectedLinks.add(clean);
+    else rawState.selectedLinks.delete(clean);
+    raw_updateReportSelectionUi();
+  }
+
+  function raw_clearSelection(){
+    rawState.selectedLinks.clear();
+    raw_updateReportSelectionUi();
+    raw_renderPage();
+  }
+
+  function raw_sendSelectionToReportPage(){
+    const lines = raw_selectedLinksArray();
+    if (!lines.length) {
+      raw_notice("warn", "Select at least one article first.");
+      return;
+    }
+    const input = document.getElementById("rep_linksInput");
+    if (input) input.value = lines.join("\n");
+    if (typeof showPage === "function") showPage("report");
+  }
+
+  function raw_generateReportFromSelection(){
+    const lines = raw_selectedLinksArray();
+    if (!lines.length) {
+      raw_notice("warn", "Select at least one article first.");
+      return;
+    }
+
+    const preview = R("raw-reportPreview");
+    preview.classList.add("show");
+    preview.innerHTML = "Generating report preview…";
+    raw_notice("busy", `📝 Generating report from ${lines.length} selected article(s)…`);
+
+    raw_runRpc(
+      "Generate report from selected",
+      (gs) => gs.ui_generateFuturescanReportFromLinks(lines.join("\n")),
+      (res) => {
+        if (!res || res.ok !== true || !res.html) {
+          preview.innerHTML = "Could not generate report preview.";
+          raw_notice("err", "❌ Report generation failed.\n" + (res?.message || JSON.stringify(res, null, 2)));
+          return;
+        }
+        const html = String(res.html || "");
+        preview.innerHTML = "";
+        const frame = document.createElement("iframe");
+        frame.title = "Generated report preview";
+        frame.setAttribute("sandbox", "allow-same-origin");
+        frame.srcdoc = html;
+        preview.appendChild(frame);
+        raw_notice("ok", "✅ Report preview generated from your selected articles.");
+      },
+      (err) => {
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        preview.innerHTML = "Could not generate report preview.";
+        raw_notice("err", "❌ Report generation RPC error:\n" + msg);
+      },
+      { warnAfterMs: 15000, hardTimeoutMs: 180000 }
+    );
   }
 
   // ----- chips helpers -----
@@ -1396,6 +1486,7 @@
       const isSelected = rawState.selectedIds.has(articleId);
       const isExpanded = rawState.expandedIds.has(articleId);
       const isLlmLoading = rawState.loadingIds.has(articleId);
+      const isSelected = !!link && rawState.selectedLinks.has(link);
       const reasonItems = (r.llmReasons || []).map(x => `<li>${raw_escape(x)}</li>`).join("");
       const summaryText = String(r.llmSummary || "").trim();
       const recommendationLabel = recClass === "publish" ? "Yes" : (recClass === "maybe" ? "Maybe" : "No");
@@ -1419,6 +1510,10 @@
             <div class="card-title">${titleHtml}</div>
             <div class="card-desc">${desc}</div>
             <div class="card-actions-top">
+              <label class="selectChip" title="Select this article for report generation">
+                <input type="checkbox" data-action="select-link" data-link="${raw_attr(link)}" ${isSelected ? "checked" : ""}>
+                Add to report
+              </label>
               <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Refresh LLM output using the currently saved article text">${llmBtnLabel}</button>
               <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again, then rerun LLM scoring and summary">${llmRereadLabel}</button>
             </div>
@@ -1444,6 +1539,7 @@
     }).join("");
 
     R("raw-cards").innerHTML = cards;
+    raw_updateReportSelectionUi();
 
     const firstCard = R("raw-cards")?.querySelector(".card");
     if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
@@ -1688,6 +1784,9 @@
     if (t.closest("[data-stop-card-toggle='1']")) return;
 
     if (t.closest("a")) return;
+
+    const selectInput = t.closest('input[data-action="select-link"]');
+    if (selectInput) return;
 
     const llmBtn = t.closest('[data-action="llm-refresh"], [data-action="llm-reread"]');
     if (llmBtn && llmBtn.dataset) {
