@@ -718,7 +718,7 @@
         <div class="report-flow-status" id="raw-reportStatus">Pick 3–5 articles, then generate report preview right here.</div>
       </div>
 
-      <div class="meta" id="raw-meta">Loading…</div>
+      <div class="meta" id="raw-meta"></div>
 
       <div class="reportBuilder">
         <div class="reportBuilderHead">
@@ -758,7 +758,10 @@
 </div>
 
 <script>
-  window.__init_raw = function() { raw_bootstrap(); };
+  window.__init_raw = function() {
+    raw_removeLegacyInlineReportUi();
+    raw_bootstrap();
+  };
 
   let rawState = {
     rpcSeq: 0,
@@ -848,6 +851,31 @@
     ["raw-selectPageBtn","raw-clearSelectedBtn","raw-generateSelectedBtn","raw-downloadSelectedBtn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
+    });
+  }
+
+  function raw_removeLegacyInlineReportUi(){
+    const content = document.querySelector("#raw-root .content");
+    if (!content) return;
+
+    const selectors = [
+      "#raw-report-builder",
+      "#raw-selected-count",
+      ".raw-report-builder",
+      ".raw-inline-report-controls"
+    ];
+    selectors.forEach((sel) => {
+      content.querySelectorAll(sel).forEach((node) => node.remove());
+    });
+
+    Array.from(content.children).forEach((node) => {
+      const id = String(node.id || "");
+      if (["raw-meta", "raw-wrap", "raw-reportPreviewPanel"].includes(id)) return;
+      if (node.classList?.contains("report-flow-box") || node.classList?.contains("pager")) return;
+      const text = String(node.textContent || "").toLowerCase();
+      if (text.includes("open in report generator") || text.includes("generate report from selected")) {
+        node.remove();
+      }
     });
   }
 
@@ -1238,6 +1266,7 @@
   }
 
   function raw_bootstrap(){
+    raw_removeLegacyInlineReportUi();
     raw_notice("busy", "🔄 Loading table…");
 
     raw_runRpc(
