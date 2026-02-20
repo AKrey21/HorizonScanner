@@ -18,8 +18,12 @@ const MAX_REPORT_LINKS = 5;
  * ========================================================================= */
 
 function ui_generateFuturescanReportFromLinks(linksText) {
+  const includePdf = (typeof ENABLE_PDF_GENERATION !== "undefined")
+    ? !!ENABLE_PDF_GENERATION
+    : false;
+
   const topics = rpt_buildTopicsFromLinks_(linksText, {
-    includePdf: ENABLE_PDF_GENERATION
+    includePdf
   });
 
   const tz = Session.getScriptTimeZone();

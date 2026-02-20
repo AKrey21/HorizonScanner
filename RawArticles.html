@@ -275,6 +275,25 @@
       color:var(--fs-header-text);
     }
 
+    .card-select{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:11px;
+      color:var(--fs-text);
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--fs-border);
+      background: rgba(8,18,40,.78);
+      backdrop-filter: blur(4px);
+      cursor:pointer;
+      user-select:none;
+    }
+    .card-select input{
+      margin:0;
+      accent-color: var(--fs-accent);
+    }
+
     .card-date{
       font-size:11px;
       letter-spacing:.3px;
@@ -396,6 +415,40 @@
       color:var(--fs-muted);
       font-size:12px;
       letter-spacing:.2px;
+    }
+
+    .report-flow-box{
+      border:1px solid var(--fs-border);
+      background: rgba(13,34,71,.92);
+      border-radius:14px;
+      padding:10px 12px;
+      box-shadow: var(--fs-shadow-soft);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .report-flow-row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .report-flow-status{
+      font-size:12px;
+      color:var(--fs-muted);
+    }
+    .report-preview{
+      border:1px solid var(--fs-border);
+      border-radius:12px;
+      overflow:hidden;
+      min-height:520px;
+      background:#fff;
+    }
+    .report-preview iframe{
+      width:100%;
+      min-height:520px;
+      border:0;
+      background:#fff;
     }
 
     .llmBadge{
@@ -652,7 +705,20 @@
 
     <!-- Table/content -->
     <div class="content">
-      <div class="meta" id="raw-meta">Loading…</div>
+      <div class="report-flow-box">
+        <div class="report-flow-row">
+          <b>Report builder (inline)</b>
+          <span class="pill" id="raw-selectedPill">Selected: 0</span>
+          <span class="spacer"></span>
+          <button class="btn mini" id="raw-selectPageBtn" onclick="raw_selectCurrentPage()">Select page</button>
+          <button class="btn mini" id="raw-clearSelectedBtn" onclick="raw_clearSelectedArticles()">Clear selection</button>
+          <button class="btn mini primary" id="raw-generateSelectedBtn" onclick="raw_generateReportFromSelection()">Generate report preview</button>
+          <button class="btn mini" id="raw-downloadSelectedBtn" onclick="raw_downloadEmlFromSelection()">Download .eml</button>
+        </div>
+        <div class="report-flow-status" id="raw-reportStatus">Pick 3–5 articles, then generate report preview right here.</div>
+      </div>
+
+      <div class="meta" id="raw-meta"></div>
 
       <div class="wrap" id="raw-wrap">
         <div class="cards" id="raw-cards"></div>
@@ -665,6 +731,13 @@
         <button class="btn" id="raw-next" onclick="raw_next()">Next ▶</button>
         <span class="pill" id="raw-showing" title="Rows shown on this page">—</span>
       </div>
+
+      <details class="panel" id="raw-reportPreviewPanel">
+        <summary class="label" style="cursor:pointer;">Inline report preview</summary>
+        <div class="report-preview" id="raw-reportPreview">
+          <iframe id="raw-reportFrame" title="Generated report preview"></iframe>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -672,7 +745,10 @@
 </div>
 
 <script>
-  window.__init_raw = function() { raw_bootstrap(); };
+  window.__init_raw = function() {
+    raw_removeLegacyInlineReportUi();
+    raw_bootstrap();
+  };
 
   let rawState = {
     rpcSeq: 0,
@@ -692,6 +768,9 @@
     selKwExc: new Set(),
     expandedIds: new Set(),
     loadingIds: new Set(),
+    selectedIds: new Set(),
+    selectionOrder: [],
+    reportBusy: false,
 
     rowH: 56 // used for Fit screen estimate; refined after render
   };
@@ -755,6 +834,181 @@
     });
     const refreshBtn = R("raw-refreshBtn");
     if (refreshBtn) refreshBtn.disabled = !!isBusy;
+    ["raw-selectPageBtn","raw-clearSelectedBtn","raw-generateSelectedBtn","raw-downloadSelectedBtn"].forEach(id => {
+      const btn = R(id);
+      if (btn) btn.disabled = !!isBusy;
+    });
+  }
+
+  function raw_removeLegacyInlineReportUi(){
+    const content = document.querySelector("#raw-root .content");
+    if (!content) return;
+
+    const selectors = [
+      "#raw-report-builder",
+      "#raw-selected-count",
+      ".raw-report-builder",
+      ".raw-inline-report-controls"
+    ];
+    selectors.forEach((sel) => {
+      content.querySelectorAll(sel).forEach((node) => node.remove());
+    });
+
+    Array.from(content.children).forEach((node) => {
+      const id = String(node.id || "");
+      if (["raw-meta", "raw-wrap", "raw-reportPreviewPanel"].includes(id)) return;
+      if (node.classList?.contains("report-flow-box") || node.classList?.contains("pager")) return;
+      const text = String(node.textContent || "").toLowerCase();
+      if (text.includes("open in report generator") || text.includes("generate report from selected")) {
+        node.remove();
+      }
+    });
+  }
+
+  function raw_markSelection(id, isSelected){
+    const articleId = Number(id || 0);
+    if (!articleId) return;
+    if (isSelected) {
+      if (!rawState.selectedIds.has(articleId)) rawState.selectionOrder.push(articleId);
+      rawState.selectedIds.add(articleId);
+    } else {
+      rawState.selectedIds.delete(articleId);
+      rawState.selectionOrder = rawState.selectionOrder.filter(v => v !== articleId);
+    }
+    raw_updateSelectionSummary();
+  }
+
+  function raw_getSelectedRowsOrdered(){
+    const rowsById = new Map(rawState.allRows.map(r => [Number(r.id || 0), r]));
+    return rawState.selectionOrder
+      .map(id => rowsById.get(Number(id || 0)))
+      .filter(r => r && rawState.selectedIds.has(Number(r.id || 0)));
+  }
+
+  function raw_updateSelectionSummary(msg){
+    const rows = raw_getSelectedRowsOrdered().filter(r => String(r.link || "").trim());
+    const count = rows.length;
+    if (R("raw-selectedPill")) R("raw-selectedPill").textContent = `Selected: ${count}`;
+    const status = R("raw-reportStatus");
+    if (status) {
+      status.textContent = msg || (count < 3
+        ? "Pick at least 3 articles to generate the report."
+        : (count > 5
+          ? "More than 5 selected. First 5 links will be used for report generation."
+          : "Ready to generate report from selected articles."));
+    }
+
+    const disableGenerate = rawState.reportBusy || count < 3;
+    if (R("raw-generateSelectedBtn")) R("raw-generateSelectedBtn").disabled = disableGenerate;
+    if (R("raw-downloadSelectedBtn")) R("raw-downloadSelectedBtn").disabled = disableGenerate;
+  }
+
+  function raw_getCurrentPageSlice(){
+    const total = rawState.filtered.length;
+    const pageSize = rawState.pageSize;
+    const maxPage = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(rawState.page, maxPage);
+    const start = (page - 1) * pageSize;
+    return rawState.filtered.slice(start, start + pageSize);
+  }
+
+  function raw_selectCurrentPage(){
+    raw_getCurrentPageSlice().forEach(r => {
+      const id = Number(r?.id || 0);
+      if (id) raw_markSelection(id, true);
+    });
+    raw_renderPage();
+  }
+
+  function raw_clearSelectedArticles(){
+    rawState.selectedIds.clear();
+    rawState.selectionOrder = [];
+    raw_updateSelectionSummary("Selection cleared.");
+    raw_renderPage();
+  }
+
+  function raw_getSelectedLinksText(){
+    const rows = raw_getSelectedRowsOrdered().filter(r => String(r.link || "").trim());
+    const links = rows.map(r => String(r.link || "").trim()).slice(0, 5);
+    return links.join("\n");
+  }
+
+  function raw_generateReportFromSelection(){
+    const linksText = raw_getSelectedLinksText();
+    const lines = linksText.split("\n").map(v => v.trim()).filter(Boolean);
+    if (lines.length < 3) {
+      raw_notice("warn", "Please select at least 3 articles with valid links.");
+      raw_updateSelectionSummary();
+      return;
+    }
+
+    rawState.reportBusy = true;
+    raw_updateSelectionSummary("Generating report preview from selected articles…");
+
+    google.script.run
+      .withSuccessHandler((html) => {
+        rawState.reportBusy = false;
+        if (R("raw-reportFrame")) R("raw-reportFrame").srcdoc = String(html || "");
+        if (R("raw-reportPreviewPanel")) R("raw-reportPreviewPanel").open = true;
+        raw_notice("ok", "✅ Report preview generated from selected articles.");
+        raw_updateSelectionSummary("Report preview generated below.");
+      })
+      .withFailureHandler((err) => {
+        rawState.reportBusy = false;
+        const msg = err?.message || String(err || "Unknown error");
+        raw_notice("err", "❌ Report generation failed:\n" + msg);
+        raw_updateSelectionSummary("Report generation failed.");
+      })
+      .ui_generateFuturescanReportFromLinks(lines.join("\n"));
+  }
+
+  function raw_downloadEmlFromSelection(){
+    const linksText = raw_getSelectedLinksText();
+    const lines = linksText.split("\n").map(v => v.trim()).filter(Boolean);
+    if (lines.length < 3) {
+      raw_notice("warn", "Please select at least 3 articles with valid links.");
+      raw_updateSelectionSummary();
+      return;
+    }
+
+    rawState.reportBusy = true;
+    raw_updateSelectionSummary("Building Outlook draft (.eml) from selected articles…");
+
+    google.script.run
+      .withSuccessHandler((res) => {
+        rawState.reportBusy = false;
+        const filename = res && res.filename ? res.filename : "FutureScans.eml";
+        let b64 = res && res.b64 ? res.b64 : "";
+        if (!b64) throw new Error("No .eml payload returned.");
+
+        b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+        const blob = new Blob([bytes], { type: "message/rfc822" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        raw_notice("ok", "✅ Downloaded Outlook .eml from selected articles.");
+        raw_updateSelectionSummary("Outlook draft downloaded.");
+      })
+      .withFailureHandler((err) => {
+        rawState.reportBusy = false;
+        const msg = err?.message || String(err || "Unknown error");
+        raw_notice("err", "❌ Outlook draft generation failed:\n" + msg);
+        raw_updateSelectionSummary("Outlook draft generation failed.");
+      })
+      .ui_buildOutlookEmlFromLinks_v2(lines.join("\n"));
   }
 
   function raw_runRpc(label, invokeFn, onSuccess, onFailure, opts){
@@ -922,6 +1176,7 @@
   }
 
   function raw_bootstrap(){
+    raw_removeLegacyInlineReportUi();
     raw_notice("busy", "🔄 Loading table…");
 
     raw_runRpc(
@@ -962,6 +1217,9 @@
             searchText: (title + " " + link + " " + source + " " + theme + " " + poi + " " + keywords + " " + llmRecommendation + " " + llmSummary + " " + llmReasons.join(" ")).toLowerCase()
           }, row);
         });
+        rawState.selectedIds.clear();
+        rawState.selectionOrder = [];
+        rawState.reportBusy = false;
         rawState.page = 1;
 
         raw_fillDatalist("raw-themeList",  res.facets?.themes || []);
@@ -1135,6 +1393,7 @@
       const desc = descParts.length ? descParts.join(" • ") : "No category tags available yet.";
 
       const articleId = Number(r.id || 0);
+      const isSelected = rawState.selectedIds.has(articleId);
       const isExpanded = rawState.expandedIds.has(articleId);
       const isLlmLoading = rawState.loadingIds.has(articleId);
       const reasonItems = (r.llmReasons || []).map(x => `<li>${raw_escape(x)}</li>`).join("");
@@ -1149,6 +1408,10 @@
       return `
         <article class="card ${isExpanded ? "expanded" : ""}" data-id="${articleId}">
           <div class="card-media" ${mediaStyle}>
+            <label class="card-select" data-stop-card-toggle="1" title="Select article for report generation">
+              <input class="raw-card-select" type="checkbox" data-id="${articleId}" ${isSelected ? "checked" : ""}/>
+              <span>Select</span>
+            </label>
             <span class="card-date">${dateLabel}</span>
             <div class="scoreBadge">LLM<span>${llmScore}</span></div>
           </div>
@@ -1185,6 +1448,7 @@
     const firstCard = R("raw-cards")?.querySelector(".card");
     if (firstCard && firstCard.offsetHeight) rawState.rowH = firstCard.offsetHeight;
 
+    raw_updateSelectionSummary();
     raw_noticeClear();
   }
 
@@ -1421,6 +1685,8 @@
     const t = e.target;
     if (!t) return;
 
+    if (t.closest("[data-stop-card-toggle='1']")) return;
+
     if (t.closest("a")) return;
 
     const llmBtn = t.closest('[data-action="llm-refresh"], [data-action="llm-reread"]');
@@ -1455,6 +1721,15 @@
     else rawState.expandedIds.add(id);
 
     raw_renderPage();
+  });
+
+  R("raw-cards").addEventListener("change", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (!t.classList.contains("raw-card-select")) return;
+    const id = Number(t.dataset.id || 0);
+    if (!id) return;
+    raw_markSelection(id, !!t.checked);
   });
 
   // Search debounce (fast)
