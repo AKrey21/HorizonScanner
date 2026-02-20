@@ -789,9 +789,6 @@ function ui_getRawArticles_bootstrap_v1() {
     const display = range.getDisplayValues().map(r => r.map(c => String(c || "").trim()));
 
     const headers = display[0];
-    const data = display.slice(1)
-      .map((r, idx) => ({ rowNo: idx + 2, row: r }))
-      .filter((entry) => entry.row.some((c) => c.trim() !== ""));
 
     const norm = (s) =>
       String(s || "").trim().toLowerCase()
@@ -823,6 +820,16 @@ function ui_getRawArticles_bootstrap_v1() {
       llmSummary: findCol(["llm summary", "llm_summary"]),
       llmReasons: findCol(["llm reasons", "llm_reasons", "score reasons", "score_reasons"])
     };
+
+    const hasArticleIdentity = (row) => {
+      const title = (idx.title >= 0) ? String(row[idx.title] || "").trim() : "";
+      const link = (idx.link >= 0) ? String(row[idx.link] || "").trim() : "";
+      return !!(title || link);
+    };
+
+    const data = display.slice(1)
+      .map((r, idxRow) => ({ rowNo: idxRow + 2, row: r }))
+      .filter((entry) => hasArticleIdentity(entry.row));
 
     const llmEntriesRaw = (typeof raw_readLlmRankSheet_ === "function") ? raw_readLlmRankSheet_() : [];
     const llmEntries = Array.isArray(llmEntriesRaw)

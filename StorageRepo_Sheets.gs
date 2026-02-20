@@ -106,7 +106,8 @@ function repo_pruneRawArticlesByAge_(maxAgeDays) {
   }
   const clearStart = 2 + kept.length;
   if (clearStart <= lastRow) {
-    sh.getRange(clearStart, 1, lastRow - clearStart + 1, 7).clearContent();
+    const colsToClear = Math.max(7, sh.getLastColumn());
+    sh.getRange(clearStart, 1, lastRow - clearStart + 1, colsToClear).clearContent();
   }
 
   return { removed: removed, kept: kept.length };
