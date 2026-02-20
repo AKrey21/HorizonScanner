@@ -259,7 +259,7 @@ function ui_freshSearchRawArticles_14days_v1() {
   ingestRes.reset = resetInfo;
 
   if (ingestRes && ingestRes.ok && ingestRes.stats && Number(ingestRes.stats.imported || 0) > 0) {
-    ingestRes.llm = ingest_runDailyLlmScoringForNewArticles_({});
+    ingestRes.llm = ingest_runDailyLlmScoringForNewArticles_({ timeBudgetMs: 45000 });
 
     if (ingestRes.llm && ingestRes.llm.status === "in_progress") {
       ingestRes.llm.queue = ingest_scheduleDailyLlmScoring_();
@@ -278,6 +278,58 @@ function ui_freshSearchRawArticles_14days_v1() {
   ingestRes.message = "Fresh search complete: reset + import past 14 days.";
   ingestRes._sig = "IngestService.ui_freshSearchRawArticles_14days_v1 @ 2026-02-20";
   return ingestRes;
+}
+
+function ui_resetRawArticlesForFreshSearch_v1() {
+  var reset = repo_resetRawArticles_();
+  var resetInfo = {
+    sheetName: reset && reset.getName ? reset.getName() : ING_CFG.RAW_SHEET,
+    rowsAfterReset: reset && reset.getLastRow ? reset.getLastRow() : 0
+  };
+
+  if (typeof ui_clearRawArticlesLlmRankCache_v1 === "function") {
+    try {
+      ui_clearRawArticlesLlmRankCache_v1();
+    } catch (err) {
+      // non-fatal
+    }
+  }
+
+  return {
+    ok: true,
+    message: "Raw Articles sheet reset and LLM cache cleared.",
+    reset: resetInfo,
+    _sig: "IngestService.ui_resetRawArticlesForFreshSearch_v1 @ 2026-02-20"
+  };
+}
+
+function ui_runDailyLlmScoringForNewArticles_v1(payload) {
+  var budget = Number(payload && payload.timeBudgetMs || 45000);
+  if (!isFinite(budget) || budget < 10000) budget = 10000;
+
+  var llm = ingest_runDailyLlmScoringForNewArticles_({ timeBudgetMs: budget });
+  if (!llm || llm.ok !== true) {
+    return {
+      ok: false,
+      message: (llm && llm.message) ? llm.message : "Failed to score newly imported articles.",
+      llm: llm || null,
+      _sig: "IngestService.ui_runDailyLlmScoringForNewArticles_v1 @ 2026-02-20"
+    };
+  }
+
+  if (llm.status === "in_progress") {
+    llm.queue = ingest_scheduleDailyLlmScoring_();
+    llm.message = "LLM scoring started and queued to continue in background until all new rows are processed.";
+  } else if (!llm.message) {
+    llm.message = "LLM scoring completed for newly imported articles.";
+  }
+
+  return {
+    ok: true,
+    message: "LLM scoring run completed.",
+    llm: llm,
+    _sig: "IngestService.ui_runDailyLlmScoringForNewArticles_v1 @ 2026-02-20"
+  };
 }
 
 function ui_rereadRescoreAllRawArticles_v1(payload) {
