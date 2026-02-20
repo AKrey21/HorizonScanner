@@ -1534,8 +1534,6 @@
 Scoring ${imported} imported article(s) with AI.`);
             R("raw-lastRefresh").textContent = "Fresh search step 3/3…";
 
-            const scoringStartTs = Date.now();
-            const maxScoringLoopMs = 6 * 60 * 1000;
             let scoringPass = 0;
             let lastScoreMeta = null;
 
@@ -1560,7 +1558,7 @@ Scoring ${imported} imported article(s) with AI.`);
                   const total = Number(meta.total_rows || imported || 0);
                   const recommended = Number(meta.recommended_total || 0);
 
-                  if (llm.status === "in_progress" && (Date.now() - scoringStartTs) < maxScoringLoopMs) {
+                  if (llm.status === "in_progress") {
                     raw_notice(
                       "busy",
                       `⏳ Fresh search step 3/3… (pass ${scoringPass})
@@ -1575,15 +1573,9 @@ Recommended: ${recommended}`
                   }
 
                   raw_setBusyUI(false);
-                  const timedOut = llm.status === "in_progress";
-                  const statusPrefix = timedOut ? "⚠️ Fresh search imported articles; AI scoring still running in background." : "✅ Fresh search complete.";
-                  const aiLine = timedOut
-                    ? `AI scoring: ${llm.message || "in progress"} (showing latest progress)`
-                    : `AI scoring: ${llm.message || llm.status || "done"}`;
-
                   raw_notice(
-                    timedOut ? "warn" : "ok",
-                    `${statusPrefix}
+                    "ok",
+                    `✅ Fresh search complete.
 
 Imported: ${s.imported || 0}
 Duplicates skipped: ${s.skippedDuplicate || 0}
@@ -1595,12 +1587,10 @@ Feed errors: ${s.feedErrors || 0}
 AI scored: ${Number(lastScoreMeta?.scored_total || 0)} / ${Number(lastScoreMeta?.total_rows || imported || 0)}
 AI pending: ${Number(lastScoreMeta?.pending_rows || 0)}
 AI recommended: ${Number(lastScoreMeta?.recommended_total || 0)}
-${aiLine}`
+AI scoring: ${llm.message || llm.status || "done"}`
                   );
 
-                  R("raw-lastRefresh").textContent = timedOut
-                    ? "Fresh search done (AI continues in background) @ " + new Date().toLocaleTimeString()
-                    : "Fresh search done @ " + new Date().toLocaleTimeString();
+                  R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
                   raw_bootstrap();
                 },
                 (err) => {
