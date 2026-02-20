@@ -525,22 +525,16 @@
       <div class="rightControls">
       <div class="label" style="margin-right:6px;">Actions:</div>
       <div class="row tight" style="flex-wrap:wrap;">
-        <button class="btn primary" id="raw-importDailyBtn" onclick="raw_importRss('daily')">
-          Daily (prune 14d)
+        <button class="btn primary" id="raw-dailySearchBtn" onclick="raw_dailySearchAndPrune()" title="Search today's feed updates, prune anything older than 14 days, and run AI scoring for newly discovered articles.">
+          Daily Search and Prune
         </button>
-        <button class="btn" id="raw-import14Btn" onclick="raw_importRss('14')">Import last 14 days</button>
-        <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run AI scoring (new only)</button>
-        <button class="btn" id="raw-rereadPublishBtn" onclick="raw_rereadPublishBatch()" title="Re-fetch article text and rerun LLM scoring only for publish-recommended articles in the current filtered results">Re-read + rescore all (Publish)</button>
-        <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh</button>
+        <button class="btn" id="raw-freshSearchBtn" onclick="raw_freshSearch()" title="Clear all raw articles, ingest the past 14 days from scratch, then run AI scoring.">
+          Fresh Search
+        </button>
+        <button class="btn" id="raw-rereadAllBtn" onclick="raw_rereadRescoreAll()" title="Clear AI rank cache and rescore all current raw articles.">
+          Re-read All Articles
+        </button>
       </div>
-      <details id="raw-advancedActions" style="margin-top:8px;">
-        <summary class="label" style="cursor:pointer;">More actions</summary>
-        <div class="row tight" style="margin-top:8px; flex-wrap:wrap;">
-          <button class="btn" id="raw-import7Btn" onclick="raw_importRss('7')">Import last 7 days</button>
-          <button class="btn" id="raw-importAllBtn" onclick="raw_importRss('all')">Import all time</button>
-          <button class="btn" id="raw-prune14Btn" onclick="raw_pruneToTwoWeeksNow()">Prune & reset to 14 days</button>
-        </div>
-      </details>
     </div>
     </div>
   </div>
@@ -556,7 +550,7 @@
         <button class="btn" onclick="raw_applyPromptPreset('sanity')">Preset: sanity-check JSON</button>
       </div>
     </div>
-    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)”, “Refresh LLM”, and bulk re-read actions.</div>
+    <div class="label" style="margin-top:6px;">Applies to Daily Search, Fresh Search, card-level Refresh/Re-read, and Re-read All actions.</div>
   </details>
 
 
@@ -755,11 +749,12 @@
   function raw_attr(str){ return encodeURIComponent(String(str || "")); }
   function raw_unattr(str){ try { return decodeURIComponent(String(str||"")); } catch(e){ return String(str||""); } }
   function raw_setBusyUI(isBusy){
-    ["raw-import7Btn","raw-import14Btn","raw-importAllBtn","raw-importDailyBtn","raw-runLlmBtn","raw-rereadPublishBtn","raw-prune14Btn"].forEach(id => {
+    ["raw-dailySearchBtn","raw-freshSearchBtn","raw-rereadAllBtn"].forEach(id => {
       const btn = R(id);
       if (btn) btn.disabled = !!isBusy;
     });
-    R("raw-refreshBtn").disabled = !!isBusy;
+    const refreshBtn = R("raw-refreshBtn");
+    if (refreshBtn) refreshBtn.disabled = !!isBusy;
   }
 
   function raw_runRpc(label, invokeFn, onSuccess, onFailure, opts){
@@ -1495,6 +1490,84 @@
     if (el === R("raw-kwExcAdd")) { raw_addFacet("kwExc"); return; }
   });
 
+  function raw_dailySearchAndPrune(){
+    raw_importRss("daily");
+  }
+
+  function raw_freshSearch(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "⏳ Running fresh search…\nClearing raw articles, importing last 14 days, then scoring with AI.");
+    R("raw-lastRefresh").textContent = "Fresh search…";
+
+    raw_runRpc(
+      "Fresh search",
+      (gs) => gs.ui_freshSearchRawArticles_14days_v1(),
+      (res) => {
+        raw_setBusyUI(false);
+
+        if (!res || res.ok !== true) {
+          raw_notice("err", "❌ Fresh search failed.\n\nFULL RESPONSE:\n" + JSON.stringify(res, null, 2));
+          R("raw-lastRefresh").textContent = "Failed";
+          return;
+        }
+
+        const s = res.stats || {};
+        const llm = res.llm || {};
+        raw_notice(
+          "ok",
+          `✅ Fresh search complete.\n${res.message || ""}\n\nImported: ${s.imported || 0}\nDuplicates skipped: ${s.skippedDuplicate || 0}\nOld/invalid date skipped: ${s.skippedDate || 0}\nNo-match skipped: ${s.skippedNoMatch || 0}\nMissing fields skipped: ${s.skippedMissingFields || 0}\nFeed errors: ${s.feedErrors || 0}\n\nAI scoring: ${llm.message || llm.status || "done"}`
+        );
+
+        R("raw-lastRefresh").textContent = "Fresh search done @ " + new Date().toLocaleTimeString();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Fresh search RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "Failed";
+      },
+      { warnAfterMs: 35000, hardTimeoutMs: 8 * 60 * 1000 }
+    );
+  }
+
+  function raw_rereadRescoreAll(){
+    raw_setBusyUI(true);
+    raw_notice("busy", "🧠 Re-reading and rescoring all articles…");
+    R("raw-lastRefresh").textContent = "Rescoring all…";
+
+    raw_runRpc(
+      "Re-read all articles",
+      (gs) => gs.ui_rereadRescoreAllRawArticles_v1({ prompt: raw_getActivePrompt() }),
+      (res) => {
+        raw_setBusyUI(false);
+
+        if (!res || res.ok !== true) {
+          raw_notice("err", "❌ Re-read all failed.\n\nFULL RESPONSE:\n" + JSON.stringify(res, null, 2));
+          R("raw-lastRefresh").textContent = "Failed";
+          return;
+        }
+
+        const llm = res.llm || {};
+        const meta = llm.meta || {};
+        raw_notice(
+          "ok",
+          `✅ Re-read + rescore complete.\nStatus: ${llm.status || "done"}\nScored: ${meta.scored_total || 0}\nRecommended: ${meta.recommended_total || 0}`
+        );
+
+        R("raw-lastRefresh").textContent = "Rescore done @ " + new Date().toLocaleTimeString();
+        raw_bootstrap();
+      },
+      (err) => {
+        raw_setBusyUI(false);
+        const msg = err?.message || (typeof err === "string" ? err : JSON.stringify(err, null, 2));
+        raw_notice("err", "❌ Re-read all RPC error:\n" + msg);
+        R("raw-lastRefresh").textContent = "Failed";
+      },
+      { warnAfterMs: 25000, hardTimeoutMs: 8 * 60 * 1000 }
+    );
+  }
+
   function raw_importRss(rangeOverride) {
     const range = String(rangeOverride || "7").trim();
     raw_setBusyUI(true);
@@ -1543,6 +1616,15 @@
 
         if (res.prune) {
           msg += `\nPruned (>${res.prune.maxAgeDays || 14} days): ${res.prune.removed || 0}`;
+        }
+
+        if (res.llm) {
+          const llmStatus = String(res.llm.status || "done");
+          const llmMeta = res.llm.meta || {};
+          msg += `\nAI scoring: ${res.llm.message || llmStatus}`;
+          if (Number(llmMeta.scored_total || 0) > 0 || Number(llmMeta.recommended_total || 0) > 0) {
+            msg += `\nAI scored: ${llmMeta.scored_total || 0} | Recommended: ${llmMeta.recommended_total || 0}`;
+          }
         }
 
         if (Array.isArray(res.errors) && res.errors.length) {

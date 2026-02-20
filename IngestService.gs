@@ -239,6 +239,87 @@ function ingest_runDailyLlmScoringForNewArticles_(opts) {
   };
 }
 
+
+function ui_freshSearchRawArticles_14days_v1() {
+  var reset = repo_resetRawArticles_();
+  var resetInfo = {
+    sheetName: reset && reset.getName ? reset.getName() : ING_CFG.RAW_SHEET,
+    rowsAfterReset: reset && reset.getLastRow ? reset.getLastRow() : 0
+  };
+
+  if (typeof ui_clearRawArticlesLlmRankCache_v1 === "function") {
+    try {
+      ui_clearRawArticlesLlmRankCache_v1();
+    } catch (err) {
+      // Non-fatal; we continue and let scoring rebuild cache.
+    }
+  }
+
+  var ingestRes = ingest_importRSS_(14);
+  ingestRes.reset = resetInfo;
+
+  if (ingestRes && ingestRes.ok && ingestRes.stats && Number(ingestRes.stats.imported || 0) > 0) {
+    ingestRes.llm = ingest_runDailyLlmScoringForNewArticles_({});
+
+    if (ingestRes.llm && ingestRes.llm.status === "in_progress") {
+      ingestRes.llm.queue = ingest_scheduleDailyLlmScoring_();
+      ingestRes.llm.message = "LLM scoring started and queued to continue in background until all new rows are processed.";
+    } else if (ingestRes.llm && ingestRes.llm.ok === true) {
+      ingestRes.llm.message = "LLM scoring completed for newly imported articles.";
+    }
+  } else {
+    ingestRes.llm = {
+      ok: true,
+      status: "skipped",
+      message: "No new articles imported; LLM scoring skipped."
+    };
+  }
+
+  ingestRes.message = "Fresh search complete: reset + import past 14 days.";
+  ingestRes._sig = "IngestService.ui_freshSearchRawArticles_14days_v1 @ 2026-02-20";
+  return ingestRes;
+}
+
+function ui_rereadRescoreAllRawArticles_v1(payload) {
+  if (typeof ui_clearRawArticlesLlmRankCache_v1 === "function") {
+    ui_clearRawArticlesLlmRankCache_v1();
+  }
+
+  var prompt = String((payload && payload.prompt) || "").trim();
+  if (!prompt) {
+    prompt = (typeof RAW_LLM_GUIDE_TEXT !== "undefined" && RAW_LLM_GUIDE_TEXT)
+      ? RAW_LLM_GUIDE_TEXT
+      : "Score each article for executive horizon-scanning relevance and set publish_recommendation to publish, maybe, or skip.";
+  }
+
+  var llm = ui_runRawArticlesLlmRank_v2({
+    prompt: prompt,
+    maxRows: 0,
+    fetchText: true,
+    sectorBy: "theme"
+  });
+
+  if (!llm || llm.ok !== true) {
+    return {
+      ok: false,
+      message: llm && llm.message ? llm.message : "Failed to re-read and rescore all articles.",
+      llm: llm || null,
+      _sig: "IngestService.ui_rereadRescoreAllRawArticles_v1 @ 2026-02-20"
+    };
+  }
+
+  if (llm.status === "in_progress") {
+    llm.queue = ingest_scheduleDailyLlmScoring_();
+  }
+
+  return {
+    ok: true,
+    message: "Re-read and rescore all articles started.",
+    llm: llm,
+    _sig: "IngestService.ui_rereadRescoreAllRawArticles_v1 @ 2026-02-20"
+  };
+}
+
 function ui_pruneRawArticlesNow_v1(payload) {
   var daysRaw = payload && payload.days;
   var days = Number(daysRaw || ING_CFG.INGEST_PRUNE_DAYS || 14);
