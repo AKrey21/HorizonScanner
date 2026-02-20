@@ -266,6 +266,57 @@ function raw_isLlmRecommended_(llm) {
   return ["publish", "maybe", "recommend", "recommended", "feature", "include", "yes", "y"].some((v) => raw === v || raw.includes(v));
 }
 
+
+function raw_normalizePublishRecommendation_(value) {
+  const rec = String(value || "").trim().toLowerCase();
+  if (!rec) return "";
+  if (rec === "publish" || rec.includes("publish") || rec === "yes" || rec === "y") return "publish";
+  if (rec === "maybe" || rec.includes("maybe")) return "maybe";
+  if (rec === "skip" || rec.includes("skip") || rec.includes("no")) return "skip";
+  return "";
+}
+
+function raw_recommendationFromScore_(score, gatePass) {
+  const n = Number(score);
+  const pass = (typeof gatePass === "boolean") ? gatePass : true;
+  if (!Number.isFinite(n)) return "skip";
+  if (!pass) return "skip";
+  if (n >= 70) return "publish";
+  if (n >= 55) return "maybe";
+  return "skip";
+}
+
+function raw_normalizeScoredLlmPayload_(parsed, fallback) {
+  const safe = parsed && typeof parsed === "object" ? parsed : {};
+  const scoreRaw = Number(safe.final_score);
+  const finalScore = Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, scoreRaw)) : 0;
+
+  let recommendation = raw_normalizePublishRecommendation_(safe.publish_recommendation || safe.recommendation);
+  if (!recommendation) recommendation = raw_recommendationFromScore_(finalScore, safe.gate_pass);
+
+  const summaryFallback = String((fallback && fallback.summary) || "").trim();
+  const summary = String(safe.summary || "").trim() || summaryFallback;
+
+  const reasons = Array.isArray(safe.score_reasons)
+    ? safe.score_reasons.map((x) => String(x || "").trim()).filter(Boolean)
+    : [];
+  const reasonsSafe = reasons.length
+    ? reasons
+    : [
+        recommendation === "skip"
+          ? "Insufficient workforce/workplace relevance based on available evidence."
+          : "Recommendation based on available workforce/workplace signals and evidence."
+      ];
+
+  return Object.assign({}, safe, {
+    final_score: finalScore,
+    publish_recommendation: recommendation,
+    recommendation: recommendation,
+    summary: summary,
+    score_reasons: reasonsSafe
+  });
+}
+
 function ui_runWeeklyPicksLlmRank_v1(payload) {
   try {
     const prompt = String(payload?.prompt || "").trim();
@@ -367,8 +418,11 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       const cachedHasScore = Number.isFinite(Number(cachedLlm?.final_score));
       const cachedHasRec = String(cachedLlm?.publish_recommendation || cachedLlm?.recommendation || "").trim().length > 0;
       const cachedHasSummary = String(cachedLlm?.summary || "").trim().length > 0;
+      const cachedHasReasons = Array.isArray(cachedLlm?.score_reasons)
+        ? cachedLlm.score_reasons.map((x) => String(x || "").trim()).filter(Boolean).length > 0
+        : false;
 
-      if (cached && cachedHasScore && cachedHasRec && cachedHasSummary) {
+      if (cached && cachedHasScore && cachedHasRec && cachedHasSummary && cachedHasReasons) {
         pushScored({
           key: row.link || row.title,
           title: String(cached?.title || row?.title || ""),
@@ -389,6 +443,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       ? Math.max(10000, Math.min(rawBudgetMs, RAW_LLM_RANK_TIME_BUDGET_MS))
       : RAW_LLM_RANK_TIME_BUDGET_MS;
     const errors = [];
+    const scoredThisRun = [];
     const progress = raw_getLlmRankProgress_();
     const sameJob = progress &&
       progress.prompt === prompt &&
@@ -439,20 +494,19 @@ function ui_runRawArticlesLlmRank_v2(payload) {
           const article = raw_buildLlmArticle_(row, scoreFetchText);
           const llmPrompt = raw_buildLlmScorePrompt_(prompt, article);
           promptChars += llmPrompt.length;
-          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200 });
+          const responseText = aiGenerateJson_(llmPrompt, { maxOutputTokens: 1200, responseSchema: RAW_LLM_CARD_RESPONSE_SCHEMA });
           const parsed = feeds_safeParseJsonObject_(responseText);
           if (!parsed) {
             errors.push(`[${currentSector}] No JSON parsed for: ${article.url || article.title}`);
             continue;
           }
 
-          const finalScore = Number(parsed.final_score);
-          const llm = Object.assign({}, parsed, {
-            final_score: Number.isFinite(finalScore) ? finalScore : 0
+          const llm = raw_normalizeScoredLlmPayload_(parsed, {
+            summary: raw_buildFallbackSummary_(article, row)
           });
 
           const scoredRowIndex = Number(entry.row_index || 0);
-          pushScored({
+          const scoredItem = {
             key: row.link || row.title,
             title: article.title,
             url: article.url,
@@ -460,7 +514,9 @@ function ui_runRawArticlesLlmRank_v2(payload) {
             poi: article.poi,
             llm,
             row_index: scoredRowIndex
-          });
+          };
+          pushScored(scoredItem);
+          scoredThisRun.push(scoredItem);
         } catch (err) {
           errors.push(`[${currentSector}] ${String(err?.message || err)}`);
         }
@@ -480,7 +536,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
     if (sectorCursor < sectorOrder.length) {
       const currentSector = sectorOrder[sectorCursor] || "Unspecified";
       try {
-        raw_writeScoredLlmToRawSheet_(scored);
+        raw_writeScoredLlmToRawSheet_(scoredThisRun);
       } catch (err) {
         errors.push(`Sheet write warning: ${String(err?.message || err)}`);
       }
@@ -552,7 +608,7 @@ function ui_runRawArticlesLlmRank_v2(payload) {
       savedAt: new Date().toISOString()
     };
     try {
-      raw_writeScoredLlmToRawSheet_(scored);
+      raw_writeScoredLlmToRawSheet_(scoredThisRun);
     } catch (err) {
       errors.push(`Sheet write warning: ${String(err?.message || err)}`);
     }
@@ -618,11 +674,8 @@ function ui_runRawArticleLlmThoughts_v1(payload) {
       if (parsedRetry) parsed = parsedRetry;
     }
 
-    const finalScore = Number(parsed.final_score);
-    const llmSummarySafe = String(parsed.summary || "").trim() || raw_buildFallbackSummary_(article, row);
-    const llm = Object.assign({}, parsed, {
-      final_score: Number.isFinite(finalScore) ? finalScore : 0,
-      summary: llmSummarySafe
+    const llm = raw_normalizeScoredLlmPayload_(parsed, {
+      summary: raw_buildFallbackSummary_(article, row)
     });
 
     const scoredItem = {
@@ -740,12 +793,13 @@ function raw_writeScoredLlmToRawSheet_(scoredItems) {
       : "";
     const scoreNum = Number(llm.final_score);
     const score = Number.isFinite(scoreNum) ? scoreNum : "";
-    const recommendationRaw = String(llm.publish_recommendation || llm.recommendation || "").trim();
+    const recommendationNorm = raw_normalizePublishRecommendation_(llm.publish_recommendation || llm.recommendation);
+    const recommendationRaw = recommendationNorm || raw_recommendationFromScore_(score, llm.gate_pass);
     const summaryRaw = String(llm.summary || "").trim();
 
     const recommendation = recommendationRaw || existingRecommendation;
     const summary = summaryRaw || existingSummary;
-    const reasonsSafe = reasons || existingReasons;
+    const reasonsSafe = reasons || existingReasons || "Insufficient structured reasons returned; review summary.";
 
     updates.push({
       rowNo,
