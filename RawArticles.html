@@ -316,6 +316,12 @@
       flex-wrap:wrap;
     }
 
+    .card-actions-note{
+      font-size:11px;
+      color:var(--fs-muted-weak);
+      margin-top:-2px;
+    }
+
     .tag{
       font-size:11px;
       padding:4px 8px;
@@ -524,7 +530,7 @@
         </button>
         <button class="btn" id="raw-import14Btn" onclick="raw_importRss('14')">Import last 14 days</button>
         <button class="btn" id="raw-runLlmBtn" onclick="raw_runLlmScore()">Run AI scoring (new only)</button>
-        <button class="btn" id="raw-rereadPublishBtn" onclick="raw_rereadPublishBatch()" title="Re-read + reload LLM only for publish-recommended articles in the current filtered results">Re-read + reload all (Publish)</button>
+        <button class="btn" id="raw-rereadPublishBtn" onclick="raw_rereadPublishBatch()" title="Re-fetch article text and rerun LLM scoring only for publish-recommended articles in the current filtered results">Re-read + rescore all (Publish)</button>
         <button class="btn" id="raw-refreshBtn" onclick="raw_bootstrap()">Refresh</button>
       </div>
       <details id="raw-advancedActions" style="margin-top:8px;">
@@ -550,7 +556,7 @@
         <button class="btn" onclick="raw_applyPromptPreset('sanity')">Preset: sanity-check JSON</button>
       </div>
     </div>
-    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)”, “Load LLM thoughts”, and bulk re-read actions.</div>
+    <div class="label" style="margin-top:6px;">Applies to “Run AI scoring (new only)”, “Refresh LLM”, and bulk re-read actions.</div>
   </details>
 
 
@@ -1142,8 +1148,8 @@
       const allKeywords = (r.keywordsList || []).map(k => `<span class="kw-pill" title="${raw_escape(k)}">${raw_escape(k)}</span>`).join("");
       const llmBtnLabel = isLlmLoading
         ? "Loading..."
-        : (summaryText ? "Reload LLM thoughts" : "Load LLM thoughts");
-      const llmRereadLabel = isLlmLoading ? "Working..." : "Re-read + reload";
+        : (summaryText ? "Refresh LLM" : "Load LLM");
+      const llmRereadLabel = isLlmLoading ? "Working..." : "Re-read & rescore";
 
       return `
         <article class="card ${isExpanded ? "expanded" : ""}" data-id="${articleId}">
@@ -1155,9 +1161,10 @@
             <div class="card-title">${titleHtml}</div>
             <div class="card-desc">${desc}</div>
             <div class="card-actions-top">
-              <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""}>${llmBtnLabel}</button>
-              <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again and rescore with LLM">${llmRereadLabel}</button>
+              <button class="btn mini card-llm-btn" data-action="llm-refresh" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Refresh LLM output using the currently saved article text">${llmBtnLabel}</button>
+              <button class="btn mini card-llm-btn" data-action="llm-reread" data-id="${articleId}" ${isLlmLoading ? "disabled" : ""} title="Fetch article text again, then rerun LLM scoring and summary">${llmRereadLabel}</button>
             </div>
+            <div class="card-actions-note">Refresh = use saved text • Re-read = fetch article again</div>
             <div class="card-tags">
               ${tag("source", srcRaw)}
               ${tag("theme", thmRaw)}
